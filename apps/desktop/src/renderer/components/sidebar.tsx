@@ -47,6 +47,8 @@ import { projectPaginationFamily } from "../atoms/sessions"
 import { appStore } from "../atoms/store"
 import type { Agent, AgentStatus, SidebarProject } from "../lib/types"
 import { loadMoreProjectSessions, loadProjectSessions } from "../services/connection-manager"
+import { CostTracker } from "./cost-tracker"
+import { MultiAgentPanel } from "./multi-agent-panel"
 import { ServerIndicator } from "./server-indicator"
 
 // ============================================================
@@ -249,6 +251,11 @@ export function AppSidebarContent({
 					</SidebarGroup>
 				)}
 
+				{/* Hive Mind — sub-agent panel for the selected session */}
+				{selectedSessionId && (
+					<MultiAgentPanel parentSessionId={selectedSessionId} />
+				)}
+
 				{/* Recent */}
 				{recentSessions.length > 0 && (
 					<SidebarGroup>
@@ -382,6 +389,7 @@ export function AppSidebarContent({
 			<SidebarFooter className="space-y-0 p-2">
 				<ServerIndicator />
 				<SidebarMenu>
+					<CostTracker />
 					<SidebarMenuItem>
 						<SidebarMenuButton
 							tooltip="Settings"

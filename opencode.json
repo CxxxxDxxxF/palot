@@ -1,4 +1,17 @@
 {
 	"$schema": "https://opencode.ai/config.json",
-	"instructions": ["**/AGENTS.local.md", "./.local/memory.md"]
+	"instructions": ["**/AGENTS.local.md", "./.local/memory.md"],
+	"model": "openrouter/deepseek/deepseek-chat",
+	"default_agent": "builder",
+	"agent": {
+		"spec-writer": {
+			"model": "openrouter/deepseek/deepseek-chat"
+		},
+		"builder": {
+			"model": "openrouter/deepseek/deepseek-chat"
+		},
+		"reviewer": {
+			"model": "openrouter/deepseek/deepseek-chat"
+		}
+	}
 }
