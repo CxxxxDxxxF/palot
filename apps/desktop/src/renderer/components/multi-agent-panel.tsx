@@ -1,12 +1,3 @@
-/**
- * Multi-agent progress panel for the sidebar.
- *
- * Appears when the currently selected session has spawned sub-agents (i.e.
- * it is a Lead Agent orchestration run). Shows each sub-agent's name, status,
- * and live token/cost data drawn from the existing sessionMetricsFamily atom.
- *
- * Hidden when the session has no direct child sessions.
- */
 import {
 	SidebarGroup,
 	SidebarGroupContent,

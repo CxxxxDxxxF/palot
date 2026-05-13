@@ -68,21 +68,6 @@ interface SubAgentCardProps {
 	part: ToolPart
 }
 
-/**
- * Renders a sub-agent (task tool) as a three-state collapsible card.
- *
- * **Closed**: Header bar only — chevron, Zap icon, "Agent" label,
- * agent type, truncated task description, live status / duration, Open button.
- *
- * **Summary**: Header + first ~4 lines of the agent's final text as a
- * preview with a "Show more" affordance. No tool rows shown.
- *
- * **Expanded**: Header + task description + tool activity rows + full
- * markdown-rendered agent response.
- *
- * While running the card is fully expanded. On completion it auto-collapses
- * to the summary state (or closed if there's no text).
- */
 export const SubAgentCard = memo(function SubAgentCard({ part: propPart }: SubAgentCardProps) {
 	const navigate = useNavigate()
 	const { projectSlug } = useParams({ strict: false }) as { projectSlug?: string }
