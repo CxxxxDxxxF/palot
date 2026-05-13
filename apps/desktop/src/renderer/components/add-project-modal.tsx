@@ -22,6 +22,8 @@ import { useSetAtom } from "jotai"
 import { ArrowLeftIcon, FolderOpenIcon, FolderPlusIcon, Loader2Icon } from "lucide-react"
 import { useCallback, useState } from "react"
 import { hiddenProjectsAtom } from "../atoms/projects"
+import { useProjectList } from "../hooks/use-agents"
+import { useAgentActions } from "../hooks/use-server"
 import { createProjectDirectory, pickDirectory } from "../services/backend"
 import { loadProjectSessions } from "../services/connection-manager"
 
@@ -35,6 +37,8 @@ type Screen = "choose" | "create-new"
 export function AddProjectModal({ open, onOpenChange }: AddProjectModalProps) {
 	const navigate = useNavigate()
 	const setHiddenDirs = useSetAtom(hiddenProjectsAtom)
+	const projects = useProjectList()
+	const { createSession } = useAgentActions()
 
 	const [screen, setScreen] = useState<Screen>("choose")
 	const [projectName, setProjectName] = useState("")
@@ -58,13 +62,21 @@ export function AddProjectModal({ open, onOpenChange }: AddProjectModalProps) {
 
 	const finishAdd = useCallback(
 		async (directory: string) => {
-			// Un-hide in case the user had previously removed this project
 			setHiddenDirs((prev) => prev.filter((d) => d !== directory))
 			await loadProjectSessions(directory)
+			const session = await createSession(directory)
 			onOpenChange(false)
-			navigate({ to: "/" })
+			if (session) {
+				const project = projects.find((p) => p.directory === directory)
+				navigate({
+					to: "/project/$projectSlug/session/$sessionId",
+					params: { projectSlug: project?.slug ?? "unknown", sessionId: session.id },
+				})
+			} else {
+				navigate({ to: "/" })
+			}
 		},
-		[navigate, onOpenChange, setHiddenDirs],
+		[navigate, onOpenChange, setHiddenDirs, createSession, projects],
 	)
 
 	const handleOpenExisting = useCallback(async () => {
