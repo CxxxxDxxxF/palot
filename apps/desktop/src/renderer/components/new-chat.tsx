@@ -596,19 +596,27 @@ export function NewChat() {
 
 	const hasToolbar = providers
 
+	const getGreeting = () => {
+		const h = new Date().getHours()
+		if (h >= 5 && h < 12) return "Good morning, CJ."
+		if (h >= 12 && h < 17) return "Good afternoon, CJ."
+		if (h >= 17 && h < 21) return "Good evening, CJ."
+		return "Hey, let's build something."
+	}
+	const [greeting, setGreeting] = useState(getGreeting)
+	useEffect(() => {
+		const id = setInterval(() => setGreeting(getGreeting()), 60_000)
+		return () => clearInterval(id)
+	}, [])
+
 	return (
 		<div className="relative flex h-full flex-col">
 			{/* Hero area — vertically centered */}
 			<div className="flex flex-1 flex-col items-center justify-center px-0 sm:px-6">
 				<div className="w-full max-w-4xl space-y-8">
-					{/* Wordmark */}
-					<div className="flex justify-center">
-						<PalotWordmark className="h-4 w-auto text-foreground" />
-					</div>
-
-					{/* "Build what's next" + project name */}
+					{/* Greeting + project name */}
 					<div className="text-center">
-						<h1 className="text-2xl font-semibold text-foreground">Build what's next</h1>
+						<h1 className="text-2xl font-semibold text-foreground">{greeting}</h1>
 						{projects.length > 1 ? (
 							<Popover open={projectPickerOpen} onOpenChange={setProjectPickerOpen}>
 								<PopoverTrigger

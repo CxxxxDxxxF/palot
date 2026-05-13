@@ -19,7 +19,6 @@ import { activeServerConfigAtom, serverConnectedAtom } from "../atoms/connection
 import { useAgents, useProjectList, useSetCommandPaletteOpen } from "../hooks/use-agents"
 import { useAgentActions } from "../hooks/use-server"
 import type { Agent } from "../lib/types"
-import { loadProjectSessions } from "../services/connection-manager"
 import { AddProjectDialog } from "./add-project-dialog"
 import { AddProjectModal } from "./add-project-modal"
 import { APP_BAR_HEIGHT, AppBar } from "./app-bar"
