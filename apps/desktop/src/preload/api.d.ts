@@ -507,6 +507,8 @@ export interface PalotAPI {
 
 	// Directory picker
 	pickDirectory: () => Promise<string | null>
+	createProjectDirectory: (name: string) => Promise<string | null>
+	showInFinder: (filePath: string) => Promise<void>
 
 	// Fetch proxy (bypasses Chromium connection limits)
 	fetch: (req: {

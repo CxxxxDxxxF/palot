@@ -20,7 +20,7 @@ import {
 } from "@palot/ui/components/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@palot/ui/components/tooltip"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { useAtomValue } from "jotai"
+import { useAtom, useAtomValue } from "jotai"
 import {
 	AlertCircleIcon,
 	BotIcon,
@@ -29,9 +29,15 @@ import {
 	ChevronRightIcon,
 	CircleDotIcon,
 	CommandIcon,
+	CopyIcon,
+	EyeOffIcon,
+	FolderIcon,
+	FolderOpenIcon,
 	GitForkIcon,
 	Loader2Icon,
 	PencilIcon,
+	PinIcon,
+	PinOffIcon,
 	PlusIcon,
 	SearchIcon,
 	SettingsIcon,
@@ -44,9 +50,11 @@ import { activeServerConfigAtom } from "../atoms/connection"
 import { agentFamily, projectSessionIdsFamily, sandboxMappingsAtom } from "../atoms/derived/agents"
 import { automationsEnabledAtom } from "../atoms/feature-flags"
 import { projectPaginationFamily } from "../atoms/sessions"
+import { hiddenProjectsAtom, pinnedProjectsAtom, projectDisplayNamesAtom } from "../atoms/projects"
 import { appStore } from "../atoms/store"
 import type { Agent, AgentStatus, SidebarProject } from "../lib/types"
 import { loadMoreProjectSessions, loadProjectSessions } from "../services/connection-manager"
+import { showInFinder } from "../services/backend"
 import { CostTracker } from "./cost-tracker"
 import { MultiAgentPanel } from "./multi-agent-panel"
 import { ServerIndicator } from "./server-indicator"
@@ -110,8 +118,9 @@ export function AppSidebarContent({
 	serverConnected,
 }: AppSidebarContentProps) {
 	const navigate = useNavigate()
-	const routeParams = useParams({ strict: false }) as { sessionId?: string }
+	const routeParams = useParams({ strict: false }) as { sessionId?: string; projectSlug?: string }
 	const selectedSessionId = routeParams.sessionId ?? null
+	const selectedProjectSlug = routeParams.projectSlug ?? null
 	const automationsEnabled = useAtomValue(automationsEnabledAtom)
 	const activeServer = useAtomValue(activeServerConfigAtom)
 	const isLocalServer = activeServer.type === "local"
@@ -120,15 +129,22 @@ export function AppSidebarContent({
 	const [projectSearch, setProjectSearch] = useState("")
 	const [projectSearchActive, setProjectSearchActive] = useState(false)
 	const projectSearchRef = useRef<HTMLInputElement>(null)
+	const [displayNames] = useAtom(projectDisplayNamesAtom)
+
+	// Auto-show search input when there are more than 5 projects
+	const shouldAutoSearch = projects.length > 5
+	const showSearchInput = shouldAutoSearch || projectSearchActive
 
 	// Filter projects by search query (client-side, case-insensitive)
+	// Also checks custom display name overrides
 	const filteredProjects = useMemo(() => {
 		if (!projectSearch.trim()) return projects
 		const q = projectSearch.toLowerCase()
-		return projects.filter(
-			(p) => p.name.toLowerCase().includes(q) || p.directory.toLowerCase().includes(q),
-		)
-	}, [projects, projectSearch])
+		return projects.filter((p) => {
+			const label = (displayNames[p.directory] ?? p.name).toLowerCase()
+			return label.includes(q) || p.directory.toLowerCase().includes(q)
+		})
+	}, [projects, projectSearch, displayNames])
 
 	const toggleProjectSearch = useCallback(() => {
 		setProjectSearchActive((prev) => {
@@ -287,6 +303,7 @@ export function AppSidebarContent({
 						<SidebarGroupLabel>Projects</SidebarGroupLabel>
 						{/* Action buttons row */}
 						<div className="absolute top-3.5 right-3 flex max-w-[calc(100%-4rem)] items-center gap-0.5 overflow-hidden">
+							{!shouldAutoSearch && (
 							<Tooltip>
 								<TooltipTrigger
 									render={
@@ -312,6 +329,7 @@ export function AppSidebarContent({
 									{projectSearchActive ? "Close search" : "Search projects"}
 								</TooltipContent>
 							</Tooltip>
+						)}
 							<Tooltip>
 								<TooltipTrigger
 									render={
@@ -346,8 +364,8 @@ export function AppSidebarContent({
 							)}
 						</div>
 
-						{/* Inline project search */}
-						{projectSearchActive && (
+						{/* Inline project search — always visible when >5 projects, toggleable otherwise */}
+						{showSearchInput && (
 							<div className="px-2 pb-1">
 								<Input
 									ref={projectSearchRef}
@@ -371,6 +389,7 @@ export function AppSidebarContent({
 									key={project.id}
 									project={project}
 									selectedSessionId={selectedSessionId}
+									selectedProjectSlug={selectedProjectSlug}
 									onRename={onRenameSession}
 									onDelete={onDeleteSession}
 									onFork={onForkSession}
@@ -446,22 +465,90 @@ const ProjectSessionItem = memo(function ProjectSessionItem({
  * A project folder in the sidebar that lists its sessions as a flat list.
  * Sessions are loaded lazily on first expand from the server.
  * Shows a "Load more" button that fetches additional sessions.
+ * Right-click for Rename, Pin, Open in Finder, Copy path, and Remove options.
  */
 const ProjectFolder = memo(function ProjectFolder({
 	project,
 	selectedSessionId,
+	selectedProjectSlug,
 	onRename,
 	onDelete,
 	onFork,
 }: {
 	project: SidebarProject
 	selectedSessionId: string | null
+	selectedProjectSlug?: string | null
 	onRename?: (agent: Agent, title: string) => Promise<void>
 	onDelete?: (agent: Agent) => Promise<void>
 	onFork?: (agent: Agent) => Promise<void>
 }) {
 	const navigate = useNavigate()
 	const [expanded, setExpanded] = useState(false)
+
+	// Project management atoms
+	const [pinnedDirs, setPinnedDirs] = useAtom(pinnedProjectsAtom)
+	const [, setHiddenDirs] = useAtom(hiddenProjectsAtom)
+	const [displayNames, setDisplayNames] = useAtom(projectDisplayNamesAtom)
+
+	const isPinned = pinnedDirs.includes(project.directory)
+	const displayName = displayNames[project.directory] ?? project.name
+
+	// Parent folder name shown as a subtle path hint
+	const parentDirHint = useMemo(() => {
+		const parts = project.directory.split("/").filter(Boolean)
+		return parts.length >= 2 ? parts[parts.length - 2] : ""
+	}, [project.directory])
+
+	// Inline rename state
+	const [isRenaming, setIsRenaming] = useState(false)
+	const [renameValue, setRenameValue] = useState("")
+	const renameInputRef = useRef<HTMLInputElement>(null)
+
+	useEffect(() => {
+		if (isRenaming && renameInputRef.current) {
+			renameInputRef.current.focus()
+			renameInputRef.current.select()
+		}
+	}, [isRenaming])
+
+	const startRenaming = useCallback(() => {
+		setRenameValue(displayName)
+		setIsRenaming(true)
+	}, [displayName])
+
+	const confirmRename = useCallback(() => {
+		const trimmed = renameValue.trim()
+		setIsRenaming(false)
+		if (!trimmed || trimmed === project.name) {
+			setDisplayNames((prev) => {
+				const next = { ...prev }
+				delete next[project.directory]
+				return next
+			})
+		} else {
+			setDisplayNames((prev) => ({ ...prev, [project.directory]: trimmed }))
+		}
+	}, [renameValue, project.name, project.directory, setDisplayNames])
+
+	const togglePin = useCallback(() => {
+		if (isPinned) {
+			setPinnedDirs((prev) => prev.filter((d) => d !== project.directory))
+		} else {
+			setPinnedDirs((prev) => [...prev, project.directory])
+		}
+	}, [isPinned, project.directory, setPinnedDirs])
+
+	const removeFromList = useCallback(() => {
+		setHiddenDirs((prev) => [...prev, project.directory])
+	}, [project.directory, setHiddenDirs])
+
+	const handleOpenInFinder = useCallback(() => {
+		showInFinder(project.directory)
+	}, [project.directory])
+
+	const handleCopyPath = useCallback(() => {
+		navigator.clipboard.writeText(project.directory)
+	}, [project.directory])
 
 	// Subscribe to just this project's session IDs
 	const sessionIds = useAtomValue(projectSessionIdsFamily(project.directory))
@@ -473,7 +560,6 @@ const ProjectFolder = memo(function ProjectFolder({
 	useEffect(() => {
 		if (!expanded || pagination.loaded || pagination.loading) return
 
-		// Look up sandbox dirs for this project from the discovery data
 		const { parentToSandboxes } = appStore.get(sandboxMappingsAtom)
 		const sandboxDirs = parentToSandboxes.get(project.directory)
 
@@ -484,7 +570,6 @@ const ProjectFolder = memo(function ProjectFolder({
 	}, [expanded, pagination.loaded, pagination.loading, project.directory])
 
 	// Read agents non-reactively (via appStore.get) for sorting.
-	// Individual items render reactively via ProjectSessionItem -> agentFamily.
 	const projectSessions = useMemo(() => {
 		const agents: Agent[] = []
 		for (const id of sessionIds) {
@@ -492,11 +577,9 @@ const ProjectFolder = memo(function ProjectFolder({
 			if (agent) agents.push(agent)
 		}
 		return agents.sort((a, b) => {
-			// Active sessions float to top
 			const aActive = a.status === "running" || a.status === "waiting" || a.status === "failed"
 			const bActive = b.status === "running" || b.status === "waiting" || b.status === "failed"
 			if (aActive !== bActive) return aActive ? -1 : 1
-			// Within same group, sort by lastActiveAt (matches server's time_updated DESC)
 			return b.lastActiveAt - a.lastActiveAt
 		})
 	}, [sessionIds])
@@ -505,29 +588,94 @@ const ProjectFolder = memo(function ProjectFolder({
 		loadMoreProjectSessions(project.directory, pagination.currentLimit)
 	}, [project.directory, pagination.currentLimit])
 
-	// Show loading state when initial fetch or load-more is in progress
 	const isInitialLoading = expanded && !pagination.loaded && !pagination.loading
 	const isLoading = pagination.loading || isInitialLoading
+	const isSelected = project.slug === selectedProjectSlug
+
+	const projectButton = (
+		<SidebarMenuButton
+			isActive={isSelected}
+			tooltip={project.directory}
+			onClick={() => {
+				if (isRenaming) return
+				setExpanded(!expanded)
+				navigate({
+					to: "/project/$projectSlug",
+					params: { projectSlug: project.slug },
+				})
+			}}
+		>
+			<ChevronRightIcon
+				className="size-3 shrink-0 text-muted-foreground transition-transform duration-150 ease-out"
+				style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
+			/>
+			<FolderIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+			<div className="min-w-0 flex-1">
+				{isRenaming ? (
+					<Input
+						ref={renameInputRef}
+						value={renameValue}
+						onChange={(e) => setRenameValue(e.target.value)}
+						onKeyDown={(e) => {
+							e.stopPropagation()
+							if (e.key === "Enter") confirmRename()
+							if (e.key === "Escape") setIsRenaming(false)
+						}}
+						onBlur={confirmRename}
+						onClick={(e) => e.stopPropagation()}
+						className="h-auto min-w-0 flex-1 border-none bg-transparent p-0 text-[13px] shadow-none focus-visible:ring-0"
+					/>
+				) : (
+					<>
+						<span className="block truncate text-[13px] font-medium leading-tight">
+							{displayName}
+						</span>
+						{parentDirHint && (
+							<span className="block truncate text-[10px] leading-tight text-muted-foreground/50">
+								{parentDirHint}
+							</span>
+						)}
+					</>
+				)}
+			</div>
+			{isPinned && <PinIcon className="size-3 shrink-0 text-muted-foreground/40" />}
+		</SidebarMenuButton>
+	)
 
 	return (
 		<SidebarMenuItem>
 			<Collapsible open={expanded} onOpenChange={setExpanded}>
-				<SidebarMenuButton
-					tooltip={project.name}
-					onClick={() => {
-						setExpanded(!expanded)
-						navigate({
-							to: "/project/$projectSlug",
-							params: { projectSlug: project.slug },
-						})
-					}}
-				>
-					<ChevronRightIcon
-						className="size-3 shrink-0 text-muted-foreground transition-transform duration-150 ease-out"
-						style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
-					/>
-					<span className="truncate font-medium">{project.name}</span>
-				</SidebarMenuButton>
+				<ContextMenu>
+					<ContextMenuTrigger render={projectButton} />
+					<ContextMenuContent>
+						<ContextMenuItem onSelect={startRenaming}>
+							<PencilIcon className="size-4" />
+							Rename
+						</ContextMenuItem>
+						<ContextMenuItem onSelect={togglePin}>
+							{isPinned ? (
+								<PinOffIcon className="size-4" />
+							) : (
+								<PinIcon className="size-4" />
+							)}
+							{isPinned ? "Unpin" : "Pin to top"}
+						</ContextMenuItem>
+						<ContextMenuSeparator />
+						<ContextMenuItem onSelect={handleOpenInFinder}>
+							<FolderOpenIcon className="size-4" />
+							Open in Finder
+						</ContextMenuItem>
+						<ContextMenuItem onSelect={handleCopyPath}>
+							<CopyIcon className="size-4" />
+							Copy path
+						</ContextMenuItem>
+						<ContextMenuSeparator />
+						<ContextMenuItem variant="destructive" onSelect={removeFromList}>
+							<EyeOffIcon className="size-4" />
+							Remove from list
+						</ContextMenuItem>
+					</ContextMenuContent>
+				</ContextMenu>
 
 				<CollapsibleContent
 					keepMounted

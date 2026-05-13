@@ -167,6 +167,26 @@ export async function pickDirectory(): Promise<string | null> {
 	throw new Error("Directory picker is only available in Electron mode")
 }
 
+/**
+ * Opens a native folder picker to choose a parent location, then creates
+ * a new subfolder with the given name. Returns the created path, or null if cancelled.
+ */
+export async function createProjectDirectory(name: string): Promise<string | null> {
+	if (isElectron) {
+		return window.palot.createProjectDirectory(name)
+	}
+	throw new Error("Directory creation is only available in Electron mode")
+}
+
+/**
+ * Reveals the given path in the system file manager (Finder, Explorer, etc.).
+ */
+export async function showInFinder(filePath: string): Promise<void> {
+	if (isElectron) {
+		return window.palot.showInFinder(filePath)
+	}
+}
+
 // ============================================================
 // Git operations — Electron-only (main process via IPC)
 // In browser mode, these are not available (OpenCode server

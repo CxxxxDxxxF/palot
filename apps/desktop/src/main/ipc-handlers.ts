@@ -1,4 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, systemPreferences } from "electron"
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, shell, systemPreferences } from "electron"
+import fs from "node:fs"
+import path from "node:path"
 import {
 	acceptRun,
 	archiveRun,
@@ -318,6 +320,29 @@ export function registerIpcHandlers(): void {
 			return result.filePaths[0]
 		}),
 	)
+
+	// --- Create project directory ---
+
+	ipcMain.handle(
+		"dialog:create-directory",
+		withLogging("dialog:create-directory", async (_, name: string) => {
+			const result = await dialog.showOpenDialog({
+				properties: ["openDirectory", "createDirectory"],
+				title: "Choose where to create your project",
+				buttonLabel: "Select Location",
+			})
+			if (result.canceled || result.filePaths.length === 0) return null
+			const newDir = path.join(result.filePaths[0], name)
+			await fs.promises.mkdir(newDir, { recursive: true })
+			return newDir
+		}),
+	)
+
+	// --- Reveal path in system file manager ---
+
+	ipcMain.handle("shell:show-in-finder", (_, filePath: string) => {
+		shell.showItemInFolder(filePath)
+	})
 
 	// --- Fetch proxy (bypasses Chromium connection limits) ---
 

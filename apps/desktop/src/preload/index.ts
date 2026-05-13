@@ -182,6 +182,12 @@ contextBridge.exposeInMainWorld("palot", {
 	/** Opens a native folder picker dialog. Returns the selected path, or null if cancelled. */
 	pickDirectory: () => ipcRenderer.invoke("dialog:open-directory"),
 
+	/** Picks a parent folder then creates a new subfolder with the given name. Returns the created path, or null if cancelled. */
+	createProjectDirectory: (name: string) => ipcRenderer.invoke("dialog:create-directory", name),
+
+	/** Reveals a path in the system file manager (Finder on macOS, Explorer on Windows). */
+	showInFinder: (filePath: string) => ipcRenderer.invoke("shell:show-in-finder", filePath),
+
 	// --- Fetch proxy (bypasses Chromium connection limits) ---
 
 	/**
