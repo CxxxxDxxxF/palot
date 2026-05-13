@@ -33,6 +33,8 @@ import { useCallback, useMemo, useState } from "react"
 import { messagesFamily } from "../../atoms/messages"
 import type { DisplayMode } from "../../atoms/preferences"
 import { useDisplayMode, useSetDisplayMode } from "../../hooks/use-agents"
+import { sessionMetricsFamily } from "../../atoms/derived/session-metrics"
+import { getBudgetDisplay } from "../../lib/agent-progress-display"
 import type {
 	CompactionConfig,
 	ModelRef,
@@ -634,6 +636,9 @@ export function StatusBar({
 					<span>{DISPLAY_MODE_LABELS[displayMode]}</span>
 				</button>
 
+				{/* Budget spend + mode */}
+				{sessionId && <BudgetIndicator sessionId={sessionId} />}
+
 				{/* Context window usage */}
 				{sessionId && (
 					<ContextUsageIndicator
@@ -654,6 +659,22 @@ export function StatusBar({
 						)}
 			</div>
 		</div>
+	)
+}
+
+// ============================================================
+// Budget spend indicator (for StatusBar)
+// ============================================================
+
+function BudgetIndicator({ sessionId }: { sessionId: string }) {
+	const metrics = useAtomValue(sessionMetricsFamily(sessionId))
+	if (metrics.costRaw === 0) return null
+	const budget = getBudgetDisplay(metrics.costRaw)
+	return (
+		<span className={cn("flex items-center gap-1 tabular-nums", budget.textClassName)}>
+			<span>{metrics.cost}</span>
+			<span className="opacity-60">{budget.label}</span>
+		</span>
 	)
 }
 
