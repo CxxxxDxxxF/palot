@@ -272,30 +272,8 @@ export function AppSidebarContent({
 					<MultiAgentPanel parentSessionId={selectedSessionId} />
 				)}
 
-				{/* Recent */}
-				{recentSessions.length > 0 && (
-					<SidebarGroup>
-						<SidebarGroupLabel>Recent</SidebarGroupLabel>
-						<SidebarGroupContent>
-							<SidebarMenu>
-							{recentSessions.map((agent) => (
-								<SessionItem
-									key={agent.id}
-									agent={agent}
-									isSelected={agent.id === selectedSessionId}
-									onRename={onRenameSession}
-									onDelete={onDeleteSession}
-									onFork={onForkSession}
-									showProject
-								/>
-							))}
-							</SidebarMenu>
-						</SidebarGroupContent>
-					</SidebarGroup>
-				)}
-
 				{/* Projects */}
-				{hasContent && (activeSessions.length > 0 || recentSessions.length > 0) && (
+				{hasContent && activeSessions.length > 0 && (
 					<SidebarSeparator className="bg-sidebar-border/5" />
 				)}
 				{hasContent && (
@@ -400,6 +378,28 @@ export function AppSidebarContent({
 										No projects match &ldquo;{projectSearch}&rdquo;
 									</p>
 								)}
+							</SidebarMenu>
+						</SidebarGroupContent>
+					</SidebarGroup>
+				)}
+
+				{/* Recent */}
+				{recentSessions.length > 0 && (
+					<SidebarGroup>
+						<SidebarGroupLabel>Recent</SidebarGroupLabel>
+						<SidebarGroupContent>
+							<SidebarMenu>
+							{recentSessions.map((agent) => (
+								<SessionItem
+									key={agent.id}
+									agent={agent}
+									isSelected={agent.id === selectedSessionId}
+									onRename={onRenameSession}
+									onDelete={onDeleteSession}
+									onFork={onForkSession}
+									showProject
+								/>
+							))}
 							</SidebarMenu>
 						</SidebarGroupContent>
 					</SidebarGroup>
