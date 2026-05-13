@@ -34,6 +34,7 @@ import {
 	FolderIcon,
 	FolderOpenIcon,
 	GitForkIcon,
+	GraduationCapIcon,
 	Loader2Icon,
 	PencilIcon,
 	PinIcon,
@@ -409,6 +410,16 @@ export function AppSidebarContent({
 				<ServerIndicator />
 				<SidebarMenu>
 					<CostTracker />
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							tooltip="Skills"
+							onClick={() => navigate({ to: "/skills" })}
+							className="text-muted-foreground"
+						>
+							<GraduationCapIcon className="size-4" />
+							<span>Skills</span>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
 					<SidebarMenuItem>
 						<SidebarMenuButton
 							tooltip="Settings"

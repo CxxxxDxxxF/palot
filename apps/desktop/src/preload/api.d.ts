@@ -165,6 +165,21 @@ export interface SshServerConfig {
 export type ServerConfig = LocalServerConfig | RemoteServerConfig | SshServerConfig
 
 // ============================================================
+// Skills types
+// ============================================================
+
+export interface Skill {
+	filename: string
+	name: string
+	description: string
+	tags: string[]
+	author: string
+	created: string
+	content: string
+	raw: string
+}
+
+// ============================================================
 // mDNS discovery types
 // ============================================================
 
@@ -509,6 +524,13 @@ export interface PalotAPI {
 	pickDirectory: () => Promise<string | null>
 	createProjectDirectory: (name: string) => Promise<string | null>
 	showInFinder: (filePath: string) => Promise<void>
+
+	// Skills
+	skills: {
+		list: () => Promise<Skill[]>
+		write: (filename: string, raw: string) => Promise<string>
+		delete: (filename: string) => Promise<boolean>
+	}
 
 	// Fetch proxy (bypasses Chromium connection limits)
 	fetch: (req: {

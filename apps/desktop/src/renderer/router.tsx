@@ -19,6 +19,7 @@ import { GeneralSettings } from "./components/settings/general-settings"
 import { NotificationSettings } from "./components/settings/notification-settings"
 import { ProviderSettings } from "./components/settings/provider-settings"
 import { ServerSettings } from "./components/settings/server-settings"
+import { SkillsPage } from "./components/skills-page"
 import { SettingsPage } from "./components/settings/settings-page"
 import { SetupSettings } from "./components/settings/setup-settings"
 import { WorktreeSettings } from "./components/settings/worktree-settings"
@@ -119,6 +120,12 @@ const settingsAboutRoute = createRoute({
 	component: AboutSettings,
 })
 
+const skillsRoute = createRoute({
+	getParentRoute: () => sidebarLayout,
+	path: "skills",
+	component: SkillsPage,
+})
+
 const automationsRoute = createRoute({
 	getParentRoute: () => sidebarLayout,
 	path: "automations",
@@ -152,6 +159,7 @@ const routeTree = rootRoute.addChildren([
 	sidebarLayout.addChildren([
 		indexRoute,
 		projectRoute.addChildren([projectIndexRoute, sessionRoute]),
+		skillsRoute,
 		automationsRoute.addChildren([
 			automationsIndexRoute,
 			automationDetailRoute.addChildren([automationDetailIndexRoute, automationRunRoute]),

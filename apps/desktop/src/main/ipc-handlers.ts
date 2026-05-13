@@ -640,6 +640,43 @@ export function registerIpcHandlers(): void {
 		),
 	)
 
+	// --- Skills ---
+
+	const SKILLS_DIR = path.join(app.getPath("home"), ".config", "opencode", "skills")
+
+	function parseSkillFrontmatter(raw: string, filename: string) {
+		const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+		if (!match) return { filename, name: filename, description: "", tags: [], author: "", created: "", content: raw, raw }
+		const fm = match[1]
+		const content = match[2].trim()
+		const get = (key: string) => { const m = fm.match(new RegExp(`^${key}:\\s*(.+)$`, "m")); return m ? m[1].trim() : "" }
+		const tagsRaw = fm.match(/^tags:\s*\[([^\]]*)\]/m)
+		const tags = tagsRaw ? tagsRaw[1].split(",").map((t: string) => t.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean) : []
+		return { filename, name: get("name"), description: get("description"), tags, author: get("author"), created: get("created"), content, raw }
+	}
+
+	ipcMain.handle("skills:list", withLogging("skills:list", async () => {
+		await fs.promises.mkdir(SKILLS_DIR, { recursive: true })
+		const files = (await fs.promises.readdir(SKILLS_DIR)).filter((f: string) => f.endsWith(".md"))
+		return Promise.all(files.map(async (f: string) => {
+			const raw = await fs.promises.readFile(path.join(SKILLS_DIR, f), "utf-8")
+			return parseSkillFrontmatter(raw, f.replace(/\.md$/, ""))
+		}))
+	}))
+
+	ipcMain.handle("skills:write", withLogging("skills:write", async (_, filename: string, raw: string) => {
+		await fs.promises.mkdir(SKILLS_DIR, { recursive: true })
+		const safeFilename = filename.replace(/[^a-z0-9-_]/gi, "-").replace(/\.md$/, "") + ".md"
+		await fs.promises.writeFile(path.join(SKILLS_DIR, safeFilename), raw, "utf-8")
+		return safeFilename.replace(/\.md$/, "")
+	}))
+
+	ipcMain.handle("skills:delete", withLogging("skills:delete", async (_, filename: string) => {
+		const safeFilename = filename.replace(/[^a-z0-9-_]/gi, "-").replace(/\.md$/, "") + ".md"
+		await fs.promises.unlink(path.join(SKILLS_DIR, safeFilename))
+		return true
+	}))
+
 	// --- Settings push channel (main -> renderer) ---
 	// Notify all renderer windows when settings change so they can update reactively.
 

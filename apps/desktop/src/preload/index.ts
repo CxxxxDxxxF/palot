@@ -267,6 +267,14 @@ contextBridge.exposeInMainWorld("palot", {
 		}
 	},
 
+	// --- Skills ---
+
+	skills: {
+		list: () => ipcRenderer.invoke("skills:list"),
+		write: (filename: string, raw: string) => ipcRenderer.invoke("skills:write", filename, raw),
+		delete: (filename: string) => ipcRenderer.invoke("skills:delete", filename),
+	},
+
 	// --- Onboarding ---
 
 	onboarding: {

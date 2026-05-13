@@ -443,6 +443,31 @@ export async function fetchAutomationRuns(automationId?: string): Promise<Automa
 	throw new Error("Automations are only available in Electron mode")
 }
 
+// ============================================================
+// Skills — Electron-only (reads/writes ~/.config/opencode/skills/)
+// ============================================================
+
+export async function listSkills(): Promise<import("../../preload/api").Skill[]> {
+	if (isElectron) {
+		return window.palot.skills.list()
+	}
+	throw new Error("Skills are only available in Electron mode")
+}
+
+export async function writeSkill(filename: string, raw: string): Promise<string> {
+	if (isElectron) {
+		return window.palot.skills.write(filename, raw)
+	}
+	throw new Error("Skills are only available in Electron mode")
+}
+
+export async function deleteSkill(filename: string): Promise<boolean> {
+	if (isElectron) {
+		return window.palot.skills.delete(filename)
+	}
+	throw new Error("Skills are only available in Electron mode")
+}
+
 export async function archiveAutomationRun(runId: string): Promise<boolean> {
 	if (isElectron) {
 		return window.palot.automation.archiveRun(runId)
