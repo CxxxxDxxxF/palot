@@ -447,9 +447,25 @@ export async function fetchAutomationRuns(automationId?: string): Promise<Automa
 // Skills — Electron-only (reads/writes ~/.config/opencode/skills/)
 // ============================================================
 
-export async function listSkills(): Promise<import("../../preload/api").Skill[]> {
+export async function listSkills(): Promise<import("../../shared/skills").ManagedSkill[]> {
 	if (isElectron) {
 		return window.palot.skills.list()
+	}
+	throw new Error("Skills are only available in Electron mode")
+}
+
+export async function listAllSkills(): Promise<import("../../shared/skills").ManagedSkill[]> {
+	if (isElectron) {
+		return window.palot.skills.listAll()
+	}
+	throw new Error("Skills are only available in Electron mode")
+}
+
+export async function importSkillFromGitHub(
+	url: string,
+): Promise<import("../../shared/skills").SkillImportResult> {
+	if (isElectron) {
+		return window.palot.skills.importGitHub(url)
 	}
 	throw new Error("Skills are only available in Electron mode")
 }
