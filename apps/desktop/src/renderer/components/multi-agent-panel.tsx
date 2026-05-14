@@ -163,6 +163,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 		tokens: parentMetrics.tokens,
 		toolCallCount: parentMetrics.toolCallCount,
 		errorCount: parentMetrics.errorCount,
+		errorMessage: parentEntry?.error?.name ?? null,
 		lastActivityAt: parentEntry
 			? Math.max(parentEntry.session.time.updated, parentEntry.session.time.created)
 			: Date.now(),
@@ -531,6 +532,7 @@ function SubAgentRow({
 				{entry.errorCount > 0 && (
 					<p className="text-red-400">{entry.errorCount} error{entry.errorCount !== 1 ? "s" : ""}</p>
 				)}
+				{entry.errorMessage && <p className="text-red-400">{entry.errorMessage}</p>}
 			</TooltipContent>
 		</Tooltip>
 	)

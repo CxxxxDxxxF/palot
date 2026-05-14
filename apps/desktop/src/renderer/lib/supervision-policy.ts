@@ -62,11 +62,11 @@ export interface SupervisionPolicyResult {
 }
 
 export const DEFAULT_SUPERVISION_POLICY: SupervisionPolicyConfig = {
-	configuredBudget: 0.5,
-	maxChildren: 6,
+	configuredBudget: 1,
+	maxChildren: 12,
 	maxConcurrentAgents: 3,
-	highTokenThreshold: 120_000,
-	budgetWarningRatio: 0.8,
+	highTokenThreshold: 180_000,
+	budgetWarningRatio: 0.75,
 }
 
 function isActiveState(state: SupervisedAgentState): boolean {

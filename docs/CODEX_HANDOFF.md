@@ -159,14 +159,19 @@ bun test apps/desktop/src/renderer/components/chat/slash-commands.test.ts
 - Corrected root agent docs for Biome 2.4.2 and the macOS unsigned packaging command.
 - Ignored local launcher helpers (`Launch Palot.command*`) so absolute-path/keychain convenience scripts stay local.
 
+2026-05-14 agent reliability notes:
+- Raised default supervision limits from `$0.50`/6 children to `$1.00`/12 children to avoid normal workflows stopping at the sixth child session.
+- Updated Lead/Architect/Builder/Reviewer prompts with explicit `HANDOFF_READY` / `HANDOFF_BLOCKED` markers and retry rules.
+- Hive Mind child rows now treat SDK `session.error` state as a failed child session even when message metrics have not recorded an assistant error part.
+
 ---
 
 ## 5. Remaining Risks
 
 - **Enforcement boundary:** Policy fires at Palot's prompt submission hook, not inside OpenCode's internal `task` tool spawn. A lead agent that spawns sub-agents autonomously mid-turn bypasses all enforcement.
-- **No heartbeat/stall detector:** A hung child session has no timeout. Palot cannot detect or recover from a stalled sub-agent.
+- **Manual heartbeat recovery only:** Palot detects stalled/unresponsive child sessions and exposes restart/terminate controls, but does not automatically recover them.
 - **No kill switch:** OpenCode exposes no API to terminate a running child session from outside. Budget overruns can only be surfaced to the user, not stopped automatically.
-- **Hardcoded thresholds:** `DEFAULT_SUPERVISION_POLICY` in `supervision-policy.ts` defines `configuredBudget: 0.5`, `maxChildren: 6`, `maxConcurrentAgents: 3`. Not user-configurable.
+- **Hardcoded thresholds:** `DEFAULT_SUPERVISION_POLICY` in `supervision-policy.ts` defines `configuredBudget: 1.0`, `maxChildren: 12`, `maxConcurrentAgents: 3`. Not user-configurable.
 - **No integration test:** No automated test covers the full Lead → Architect → Builder → Reviewer flow end-to-end.
 - **Event persistence:** `supervisionEventsAtom` uses `atomWithStorage` (renderer localStorage). Not durable across devices, not a reliable audit log, capped at 50 events.
 
@@ -250,7 +255,7 @@ Provider prefix for all: `openrouter/`
 
 **If the next Codex session starts from `main` (before this branch merges)**, the highest-priority work is this full UI overhaul. If it starts from `feat/agent-overhaul` after a merge, the next priority is:
 
-1. **Heartbeat / stall detector** — poll child session `updatedAt` timestamp; surface "stalled" badge in Hive Mind panel after N seconds with no update
+1. **Automatic heartbeat recovery** — use stalled/unresponsive state to trigger a safe retry or targeted recovery prompt without manual button clicks
 2. **User-configurable budget thresholds** — expose `configuredBudget`, `maxChildren`, `maxConcurrentAgents` in settings UI; persist to disk
 3. **Full pipeline integration test** — mock the OpenCode task tool; drive a Lead → Architect → Builder → Reviewer flow; assert Hive Mind panel state transitions
 

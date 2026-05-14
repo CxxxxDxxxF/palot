@@ -61,6 +61,20 @@ End with a summary section:
 [1–2 sentences on overall quality and what the main risk is, if any]
 ```
 
+End every successful review response with this exact line:
+
+```text
+HANDOFF_READY: REVIEW_COMPLETE
+```
+
+If you cannot review because the Builder output is missing or malformed, end with:
+
+```text
+HANDOFF_BLOCKED: REVIEW_INCOMPLETE
+Blocker: [specific missing input]
+Recovery: [single concrete next action]
+```
+
 ---
 
 ## Review Checklist
@@ -85,3 +99,4 @@ For each file the Builder produced, verify:
 - Be specific — every issue must include a file path and line number (or function/variable name if line is unknown)
 - Do not restate what the code does — only report what is wrong and why
 - If you find zero issues, output `VERDICT: PASS` and a one-line summary; do not invent issues to appear thorough
+- Do not stop at a generic failure. If the implementation is incomplete, report the exact missing file, missing behavior, or failed verification command.

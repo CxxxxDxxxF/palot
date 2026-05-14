@@ -11,8 +11,8 @@ function baseInput(overrides: Partial<SupervisionPolicyInput> = {}): Supervision
 		waitingAgentCount: 0,
 		totalTokens: 10_000,
 		totalCost: 0.05,
-		configuredBudget: 0.5,
-		maxChildren: 6,
+		configuredBudget: 1,
+		maxChildren: 12,
 		maxConcurrentAgents: 3,
 		currentAgentState: "running",
 		...overrides,
@@ -27,13 +27,13 @@ describe("supervision policy", () => {
 	})
 
 	test("warns when cost approaches budget", () => {
-		const result = evaluateSupervisionPolicy(baseInput({ totalCost: 0.4 }))
+		const result = evaluateSupervisionPolicy(baseInput({ totalCost: 0.75 }))
 		expect(result.decision).toBe("warn")
 		expect(result.machineCode).toBe("SUPERVISION_WARN_COST_APPROACHING_BUDGET")
 	})
 
 	test("blocks when max child-agent count is reached", () => {
-		const result = evaluateSupervisionPolicy(baseInput({ childAgentCount: 6 }))
+		const result = evaluateSupervisionPolicy(baseInput({ childAgentCount: 12 }))
 		expect(result.decision).toBe("block")
 		expect(result.machineCode).toBe("SUPERVISION_BLOCK_MAX_CHILDREN")
 		expect(result.retryable).toBe(false)
@@ -47,14 +47,14 @@ describe("supervision policy", () => {
 	})
 
 	test("stops active work when budget is exceeded", () => {
-		const result = evaluateSupervisionPolicy(baseInput({ totalCost: 0.5 }))
+		const result = evaluateSupervisionPolicy(baseInput({ totalCost: 1 }))
 		expect(result.decision).toBe("stop")
 		expect(result.machineCode).toBe("SUPERVISION_STOP_BUDGET_EXCEEDED")
 	})
 
 	test("blocks idle work when budget is exceeded", () => {
 		const result = evaluateSupervisionPolicy(
-			baseInput({ totalCost: 0.5, currentAgentState: "completed", runningAgentCount: 0 }),
+			baseInput({ totalCost: 1, currentAgentState: "completed", runningAgentCount: 0 }),
 		)
 		expect(result.decision).toBe("block")
 		expect(result.machineCode).toBe("SUPERVISION_BLOCK_BUDGET_EXCEEDED")
@@ -70,8 +70,8 @@ describe("supervision policy", () => {
 		expect(
 			evaluateSupervisionPolicy(
 				baseInput({
-					totalCost: 0.5,
-					childAgentCount: 6,
+					totalCost: 1,
+					childAgentCount: 12,
 					runningAgentCount: 3,
 					failedAgentCount: 1,
 				}),
@@ -81,7 +81,7 @@ describe("supervision policy", () => {
 		expect(
 			evaluateSupervisionPolicy(
 				baseInput({
-					childAgentCount: 6,
+					childAgentCount: 12,
 					runningAgentCount: 3,
 					failedAgentCount: 1,
 				}),

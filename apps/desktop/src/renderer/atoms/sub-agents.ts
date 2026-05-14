@@ -31,8 +31,21 @@ export interface SubAgentEntry {
 	tokens: string
 	toolCallCount: number
 	errorCount: number
+	errorMessage: string | null
 	lastActivityAt: number
 	directory: string
+}
+
+function getSessionErrorMessage(error: unknown): string | null {
+	if (!error || typeof error !== "object") return null
+	const err = error as { name?: unknown; data?: unknown }
+	const name = typeof err.name === "string" ? err.name : "SessionError"
+	const data = err.data
+	if (data && typeof data === "object") {
+		const message = (data as { message?: unknown }).message
+		if (typeof message === "string" && message.trim()) return `${name}: ${message}`
+	}
+	return name
 }
 
 export function getPendingQuestionHeader(questions: unknown): string {
@@ -83,13 +96,14 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 			const status = entry.status ?? { type: "idle" }
 			const permissions = Array.isArray(entry.permissions) ? entry.permissions : []
 			const questions = Array.isArray(entry.questions) ? entry.questions : []
+			const errorMessage = getSessionErrorMessage(entry.error)
 
 			let agentStatus: AgentStatus = "idle"
 			if (permissions.length > 0 || questions.length > 0) {
 				agentStatus = "waiting"
 			} else if (status.type === "busy" || status.type === "retry") {
 				agentStatus = "running"
-			} else if (metrics.errorCount > 0) {
+			} else if (errorMessage || metrics.errorCount > 0) {
 				agentStatus = "failed"
 			} else if (metrics.assistantMessageCount > 0) {
 				agentStatus = "completed"
@@ -105,7 +119,7 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 			} else if (agentStatus === "completed") {
 				activity = "Returned results to Lead Agent"
 			} else if (agentStatus === "failed") {
-				activity = "Failed while running"
+				activity = errorMessage ?? "Failed while running"
 			}
 
 			next.push({
@@ -121,6 +135,7 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 				tokens: metrics.tokens,
 				toolCallCount: metrics.toolCallCount,
 				errorCount: metrics.errorCount,
+				errorMessage,
 				lastActivityAt: Math.max(recordedActivity, session.time.updated, session.time.created),
 				directory: entry.directory,
 			})
@@ -139,6 +154,7 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 					n.tokensRaw === prev[i].tokensRaw &&
 					n.toolCallCount === prev[i].toolCallCount &&
 					n.errorCount === prev[i].errorCount &&
+					n.errorMessage === prev[i].errorMessage &&
 					n.lastActivityAt === prev[i].lastActivityAt &&
 					n.directory === prev[i].directory,
 			)

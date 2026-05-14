@@ -252,7 +252,11 @@ describe("SSE child-agent hydration", () => {
 				failedAgentCount: children.filter((child) => child.agentStatus === "failed").length,
 				waitingAgentCount: children.filter((child) => child.agentStatus === "waiting").length,
 				totalTokens,
-				totalCost,
+				totalCost: Math.max(
+					totalCost,
+					DEFAULT_SUPERVISION_POLICY.configuredBudget *
+						DEFAULT_SUPERVISION_POLICY.budgetWarningRatio,
+				),
 				configuredBudget: DEFAULT_SUPERVISION_POLICY.configuredBudget,
 				maxChildren: DEFAULT_SUPERVISION_POLICY.maxChildren,
 				maxConcurrentAgents: DEFAULT_SUPERVISION_POLICY.maxConcurrentAgents,

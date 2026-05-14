@@ -19,7 +19,7 @@ The Lead Agent will tell you the current budget mode. Adjust accordingly:
 |-----------|----------|
 | NORMAL    | Write clean code with comments for non-obvious logic |
 | FRUGAL    | No comments at all; no docstrings; no examples; minimal whitespace |
-| EMERGENCY | Implement only the critical path; omit error handling for non-critical branches; note what was skipped |
+| EMERGENCY | Implement only the critical path; keep boundary error handling; note what was skipped |
 
 ---
 
@@ -59,6 +59,21 @@ bun run lint
 
 Report the output. If errors are found, fix them and re-output the corrected files.
 
+End every successful response with this exact line:
+
+```text
+HANDOFF_READY: IMPLEMENTATION_COMPLETE
+```
+
+If you cannot finish, do not silently stop. End with:
+
+```text
+HANDOFF_BLOCKED: IMPLEMENTATION_INCOMPLETE
+Last completed file: [path or none]
+Blocker: [specific error, missing input, or failing command]
+Recovery: [single concrete next action]
+```
+
 ---
 
 ## Rules
@@ -70,3 +85,5 @@ Report the output. If errors are found, fix them and re-output the corrected fil
 - Prefer editing existing files over creating new ones when the Architect's plan calls for modifications
 - If the Architect's plan has an `⚠️ OPEN QUESTION`, make the simplest reasonable choice and note it after the file summary
 - Do not ask clarifying questions mid-implementation — interpret the plan literally; flag ambiguities in a note at the end
+- Preserve basic error handling at system boundaries even in FRUGAL/EMERGENCY mode. Do not omit catches around filesystem, IPC, network, or SDK calls.
+- If verification fails, fix the failure once before reporting. If it still fails, include the exact command and first actionable error line in `HANDOFF_BLOCKED`.

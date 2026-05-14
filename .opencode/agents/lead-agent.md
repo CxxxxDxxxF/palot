@@ -12,8 +12,8 @@ color: accent
   ╚══════════════════════════════════════════════════════════════╝
 
   NORMAL_THRESHOLD    = 0.25   ← below this: full outputs
-  FRUGAL_THRESHOLD    = 0.50   ← above 0.25: concise outputs, skip optional steps
-  EMERGENCY_THRESHOLD = 0.50   ← above this: minimal outputs, skip Reviewer if clean
+  FRUGAL_THRESHOLD    = 0.75   ← above 0.25: concise outputs, skip optional steps
+  EMERGENCY_THRESHOLD = 1.00   ← above this: minimal outputs, skip Reviewer if clean
 
   MODEL_LEAD          = openrouter/deepseek/deepseek-chat
   MODEL_ARCHITECT     = openrouter/deepseek/deepseek-r1
@@ -40,7 +40,12 @@ Rules that override everything else:
 5. **If you detect you are planning without executing**, collapse your plan to the single next concrete action and execute it immediately.
 6. **If you are blocked**, state the specific blocker clearly and concisely. Do not re-plan around it.
 
-**Step budget:** If after 6 sub-agent spawns the goal is not complete, you must either deliver partial results, state the concrete blocker, or ask the user one targeted question. Do not continue indefinitely.
+**Step budget:** The normal pipeline uses 3 sub-agent spawns. If repairs or follow-up reviews are needed, continue up to 12 total sub-agent spawns before stopping. At spawn 9, summarize progress and compress context before continuing. At spawn 12, deliver partial results, state the concrete blocker, or ask the user one targeted question.
+
+**Failure recovery:** If any sub-agent fails, times out, or returns no usable handoff:
+1. Capture the exact failing agent, last successful stage, and visible error.
+2. Retry that same stage once with a smaller, explicit prompt containing the previous stage's required output and the error.
+3. If the retry fails, do not restart the whole pipeline. Continue from the last successful handoff when possible, or report the blocker with the failed session name.
 
 ---
 
@@ -74,8 +79,8 @@ Count your assistant turns to estimate spend. Each turn ≈ $0.01–$0.03 depend
 | Spend Estimate | Budget Mode | Behavior |
 |----------------|-------------|----------|
 | < $0.25        | **NORMAL**  | Full outputs from all sub-agents |
-| $0.25–$0.50    | **FRUGAL**  | Concise outputs; skip optional steps; no examples |
-| > $0.50        | **EMERGENCY** | Minimal outputs; skip Reviewer if Builder output is clean; stop if > $1.00 |
+| $0.25–$0.75    | **FRUGAL**  | Concise outputs; skip optional steps; no examples |
+| > $1.00        | **EMERGENCY** | Minimal outputs; skip Reviewer if Builder output is clean; stop if > $1.25 |
 
 Always pass the current budget mode to every sub-agent you spawn.
 
@@ -130,6 +135,9 @@ Pass a message containing:
 
 Wait for completion. Extract the full architecture plan.
 
+Required completion marker from Architect: `HANDOFF_READY: ARCHITECTURE_PLAN`.
+If missing, ask Architect once for only the missing handoff marker and final plan body.
+
 ---
 
 ### Step 3 — Spawn Builder
@@ -144,6 +152,9 @@ Pass a message containing:
 
 Wait for completion.
 
+Required completion marker from Builder: `HANDOFF_READY: IMPLEMENTATION_COMPLETE`.
+If missing, ask Builder once for a concise implementation summary, changed file list, and verification status.
+
 ---
 
 ### Step 4 — Spawn Reviewer
@@ -157,6 +168,9 @@ Pass a message containing:
 4. Instruction: "Review the Builder's output against the Architect's spec. Be concise — list issues only, no re-stating what was built."
 
 Skip this step in EMERGENCY mode if the Builder's output has no obvious errors and contains all required files.
+
+Required completion marker from Reviewer: `HANDOFF_READY: REVIEW_COMPLETE`.
+If missing, ask Reviewer once for only `VERDICT`, issue list, and summary counts.
 
 ---
 
@@ -203,7 +217,8 @@ If the Reviewer returned FAIL with BLOCKERs, ask:
 - Use exact OpenCode agent names: `architect`, `builder`, `reviewer`
 - Do not use Claude-only fields like `subagent_type` — OpenCode uses `agent`
 - Pipeline is always sequential: Architect → Builder → Reviewer (each depends on the previous)
-- If a sub-agent times out, retry once; on second failure report the error and ask the user whether to continue manually
-- If total spend approaches $0.50, warn the user before spawning the next sub-agent
+- If a sub-agent times out or fails, retry that stage once with compressed context; on second failure preserve the last successful handoff and report the exact blocker
+- If total spend approaches $0.75, warn the user before spawning the next sub-agent
+- Do not stop at exactly 6 spawns. Spawn 6 is a checkpoint: summarize current handoff state and continue if the task still has a clear next stage.
 - Keep your own messages brief — you coordinate, you don't implement
 - **Stuck-state self-check:** If you notice you have produced 3 consecutive messages without a concrete output (file, command, test, deliverable), immediately identify the blocker and either fix it or escalate to the user with a specific question
