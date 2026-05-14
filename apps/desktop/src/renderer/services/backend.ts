@@ -447,6 +447,52 @@ export async function fetchAutomationRuns(automationId?: string): Promise<Automa
 // Skills — Electron-only (reads/writes ~/.config/opencode/skills/)
 // ============================================================
 
+// ============================================================
+// Brain — Electron-only (reads/writes .palot/brain/ per project)
+// ============================================================
+
+export async function listBrainFiles(projectPath?: string): Promise<string[]> {
+	if (isElectron) return window.palot.brain.list(projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function readBrainFile(slug: string, projectPath?: string): Promise<string | null> {
+	if (isElectron) return window.palot.brain.read(slug, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function writeBrainFile(slug: string, content: string, projectPath?: string): Promise<void> {
+	if (isElectron) return window.palot.brain.write(slug, content, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function deleteBrainFile(slug: string, projectPath?: string): Promise<boolean> {
+	if (isElectron) return window.palot.brain.delete(slug, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function searchBrainFiles(
+	keyword: string,
+	projectPath?: string,
+): Promise<import("../../main/project-brain-service").BrainSearchResult[]> {
+	if (isElectron) return window.palot.brain.search(keyword, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function getBrainContextSummary(projectPath: string, sessionId?: string): Promise<string> {
+	if (isElectron) return window.palot.brain.contextSummary(projectPath, sessionId)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+// ============================================================
+// Model routing — Electron-only
+// ============================================================
+
+export async function routeModel(taskOrText: import("../../shared/tasks").BrainTask | string): Promise<string> {
+	if (isElectron) return window.palot.tasks.routeModel(taskOrText)
+	throw new Error("Model routing is only available in Electron mode")
+}
+
 export async function listSkills(): Promise<import("../../shared/skills").ManagedSkill[]> {
 	if (isElectron) {
 		return window.palot.skills.list()

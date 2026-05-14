@@ -1,6 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, shell, systemPreferences } from "electron"
-import fs from "node:fs"
 import path from "node:path"
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, shell, systemPreferences } from "electron"
 import {
 	acceptRun,
 	archiveRun,
@@ -50,7 +49,16 @@ import {
 } from "./onboarding"
 import { getOpenInTargets, openInTarget, setPreferredTarget } from "./open-in-targets"
 import { ensureServer, getServerUrl, restartServer, stopServer } from "./opencode-manager"
+import { createProjectDirectory } from "./project-directory-service"
+import { ProjectBrainService } from "./project-brain-service"
+import { TaskGraphService } from "./task-graph-service"
+import { routeTask, routePrompt } from "./model-routing-service"
+import { SupervisorStateService } from "./supervisor-state-service"
+import type { SubagentOutput } from "./supervisor-state-service"
 import { getOpaqueWindows, getSettings, onSettingsChanged, updateSettings } from "./settings-store"
+import { SkillsService } from "./skills-service"
+import { SkillImporter } from "./skill-importer"
+import type { BrainTask, TaskStatus } from "../shared/tasks"
 import {
 	checkForUpdates,
 	downloadUpdate,
@@ -332,9 +340,7 @@ export function registerIpcHandlers(): void {
 				buttonLabel: "Select Location",
 			})
 			if (result.canceled || result.filePaths.length === 0) return null
-			const newDir = path.join(result.filePaths[0], name)
-			await fs.promises.mkdir(newDir, { recursive: true })
-			return newDir
+			return createProjectDirectory(result.filePaths[0], name)
 		}),
 	)
 
@@ -642,39 +648,102 @@ export function registerIpcHandlers(): void {
 
 	// --- Skills ---
 
-	const SKILLS_DIR = path.join(app.getPath("home"), ".config", "opencode", "skills")
+	const skillsService = SkillsService.fromHomeDirectory(app.getPath("home"))
+	const skillImporter = new SkillImporter({ auditLogPath: skillsService.auditLogPath() })
+	// Global brain for backward-compat summary; per-project handlers use fromRepoRoot()
+	const globalBrainService = new ProjectBrainService(path.join(app.getPath("userData"), "brain"))
+	const taskGraphService = new TaskGraphService(globalBrainService)
 
-	function parseSkillFrontmatter(raw: string, filename: string) {
-		const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
-		if (!match) return { filename, name: filename, description: "", tags: [], author: "", created: "", content: raw, raw }
-		const fm = match[1]
-		const content = match[2].trim()
-		const get = (key: string) => { const m = fm.match(new RegExp(`^${key}:\\s*(.+)$`, "m")); return m ? m[1].trim() : "" }
-		const tagsRaw = fm.match(/^tags:\s*\[([^\]]*)\]/m)
-		const tags = tagsRaw ? tagsRaw[1].split(",").map((t: string) => t.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean) : []
-		return { filename, name: get("name"), description: get("description"), tags, author: get("author"), created: get("created"), content, raw }
+	function getBrainService(projectPath?: string): ProjectBrainService {
+		if (projectPath) return ProjectBrainService.fromRepoRoot(projectPath)
+		return globalBrainService
 	}
 
-	ipcMain.handle("skills:list", withLogging("skills:list", async () => {
-		await fs.promises.mkdir(SKILLS_DIR, { recursive: true })
-		const files = (await fs.promises.readdir(SKILLS_DIR)).filter((f: string) => f.endsWith(".md"))
-		return Promise.all(files.map(async (f: string) => {
-			const raw = await fs.promises.readFile(path.join(SKILLS_DIR, f), "utf-8")
-			return parseSkillFrontmatter(raw, f.replace(/\.md$/, ""))
-		}))
+	ipcMain.handle("skills:list", withLogging("skills:list", () => skillsService.list()))
+
+	ipcMain.handle("skills:list-all", withLogging("skills:list-all", async () => {
+		const userSkills = await skillsService.listWithOrigin("user")
+		const externalSkills = await SkillsService.scanExternalRepositories(
+			path.join(app.getPath("home"), ".opencode", "skills"),
+		)
+		return [...userSkills, ...externalSkills]
 	}))
 
-	ipcMain.handle("skills:write", withLogging("skills:write", async (_, filename: string, raw: string) => {
-		await fs.promises.mkdir(SKILLS_DIR, { recursive: true })
-		const safeFilename = filename.replace(/[^a-z0-9-_]/gi, "-").replace(/\.md$/, "") + ".md"
-		await fs.promises.writeFile(path.join(SKILLS_DIR, safeFilename), raw, "utf-8")
-		return safeFilename.replace(/\.md$/, "")
+	ipcMain.handle("skills:import-github", withLogging("skills:import-github", (_, url: string) => {
+		return skillImporter.importFromGitHub(url)
 	}))
 
-	ipcMain.handle("skills:delete", withLogging("skills:delete", async (_, filename: string) => {
-		const safeFilename = filename.replace(/[^a-z0-9-_]/gi, "-").replace(/\.md$/, "") + ".md"
-		await fs.promises.unlink(path.join(SKILLS_DIR, safeFilename))
-		return true
+	ipcMain.handle("skills:write", withLogging("skills:write", (_, filename: string, raw: string) => {
+		return skillsService.write(filename, raw)
+	}))
+
+	ipcMain.handle("skills:delete", withLogging("skills:delete", (_, filename: string) => {
+		return skillsService.delete(filename)
+	}))
+
+	ipcMain.handle("skills:brain-summary", withLogging("skills:brain-summary", () => globalBrainService.buildSummary()))
+
+	// --- Brain ---
+
+	ipcMain.handle("brain:list", withLogging("brain:list", (_, projectPath?: string) =>
+		getBrainService(projectPath).listFiles(),
+	))
+
+	ipcMain.handle("brain:read", withLogging("brain:read", (_, slug: string, projectPath?: string) =>
+		getBrainService(projectPath).readFile(slug),
+	))
+
+	ipcMain.handle("brain:write", withLogging("brain:write", (_, slug: string, content: string, projectPath?: string) =>
+		getBrainService(projectPath).writeFile(slug, content),
+	))
+
+	ipcMain.handle("brain:delete", withLogging("brain:delete", (_, slug: string, projectPath?: string) =>
+		getBrainService(projectPath).deleteFile(slug),
+	))
+
+	ipcMain.handle("brain:search", withLogging("brain:search", (_, keyword: string, projectPath?: string) =>
+		getBrainService(projectPath).searchFiles(keyword),
+	))
+
+	ipcMain.handle("brain:context-summary", withLogging("brain:context-summary", (_, projectPath: string, sessionId?: string) =>
+		getBrainService(projectPath).buildContextSummary(sessionId),
+	))
+
+	// --- Tasks ---
+
+	ipcMain.handle("tasks:load", withLogging("tasks:load", () => taskGraphService.load()))
+
+	ipcMain.handle("tasks:upsert", withLogging("tasks:upsert", (_, task: BrainTask) => taskGraphService.upsertTask(task)))
+
+	ipcMain.handle("tasks:update-status", withLogging("tasks:update-status", (_, taskId: string, status: TaskStatus) => taskGraphService.updateStatus(taskId, status)))
+
+	ipcMain.handle("tasks:execution-plan", withLogging("tasks:execution-plan", (_, tasks: BrainTask[]) => taskGraphService.buildExecutionPlan(tasks)))
+
+	ipcMain.handle("tasks:route-model", withLogging("tasks:route-model", (_, taskOrText: BrainTask | string) => {
+		if (typeof taskOrText === "string") return routePrompt(taskOrText)
+		return routeTask(taskOrText)
+	}))
+
+	// --- Supervisor State ---
+
+	ipcMain.handle("supervisor:load", withLogging("supervisor:load", (_, projectPath: string) => {
+		return new SupervisorStateService(getBrainService(projectPath)).load()
+	}))
+
+	ipcMain.handle("supervisor:save", withLogging("supervisor:save", (_, projectPath: string, state: unknown) => {
+		return new SupervisorStateService(getBrainService(projectPath)).save(state as Parameters<SupervisorStateService["save"]>[0])
+	}))
+
+	ipcMain.handle("supervisor:append-output", withLogging("supervisor:append-output", (_, projectPath: string, output: SubagentOutput) => {
+		return new SupervisorStateService(getBrainService(projectPath)).appendSubagentOutput(output)
+	}))
+
+	ipcMain.handle("supervisor:set-milestone", withLogging("supervisor:set-milestone", (_, projectPath: string, milestone: string) => {
+		return new SupervisorStateService(getBrainService(projectPath)).setMilestone(milestone)
+	}))
+
+	ipcMain.handle("supervisor:mark-task-active", withLogging("supervisor:mark-task-active", (_, projectPath: string, taskId: string) => {
+		return new SupervisorStateService(getBrainService(projectPath)).markTaskActive(taskId)
 	}))
 
 	// --- Settings push channel (main -> renderer) ---

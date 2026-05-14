@@ -168,16 +168,14 @@ export type ServerConfig = LocalServerConfig | RemoteServerConfig | SshServerCon
 // Skills types
 // ============================================================
 
-export interface Skill {
-	filename: string
-	name: string
-	description: string
-	tags: string[]
-	author: string
-	created: string
-	content: string
-	raw: string
-}
+export type Skill = ManagedSkill
+export type SkillImportResult = import("../shared/skills").SkillImportResult
+
+// ============================================================
+// Task graph types (re-exported from shared)
+// ============================================================
+
+export type { BrainTask, ExecutionPlan, TaskGraph, TaskStatus } from "../shared/tasks"
 
 // ============================================================
 // mDNS discovery types
@@ -528,8 +526,40 @@ export interface PalotAPI {
 	// Skills
 	skills: {
 		list: () => Promise<Skill[]>
+		listAll: () => Promise<Skill[]>
+		importGitHub: (url: string) => Promise<SkillImportResult>
 		write: (filename: string, raw: string) => Promise<string>
 		delete: (filename: string) => Promise<boolean>
+		brainSummary: () => Promise<string>
+	}
+
+	// Brain
+	brain: {
+		list: (projectPath?: string) => Promise<string[]>
+		read: (slug: string, projectPath?: string) => Promise<string | null>
+		write: (slug: string, content: string, projectPath?: string) => Promise<void>
+		delete: (slug: string, projectPath?: string) => Promise<boolean>
+		search: (keyword: string, projectPath?: string) => Promise<import("../main/project-brain-service").BrainSearchResult[]>
+		summary: () => Promise<string>
+		contextSummary: (projectPath: string, sessionId?: string) => Promise<string>
+	}
+
+	// Tasks
+	tasks: {
+		load: () => Promise<import("../shared/tasks").TaskGraph>
+		upsert: (task: import("../shared/tasks").BrainTask) => Promise<import("../shared/tasks").TaskGraph>
+		updateStatus: (taskId: string, status: import("../shared/tasks").TaskStatus) => Promise<void>
+		executionPlan: (tasks: import("../shared/tasks").BrainTask[]) => Promise<import("../shared/tasks").ExecutionPlan>
+		routeModel: (taskOrText: import("../shared/tasks").BrainTask | string) => Promise<string>
+	}
+
+	// Supervisor state
+	supervisor: {
+		load: (projectPath: string) => Promise<import("../main/supervisor-state-service").SupervisorState>
+		save: (projectPath: string, state: import("../main/supervisor-state-service").SupervisorState) => Promise<void>
+		appendOutput: (projectPath: string, output: import("../main/supervisor-state-service").SubagentOutput) => Promise<import("../main/supervisor-state-service").SupervisorState>
+		setMilestone: (projectPath: string, milestone: string) => Promise<void>
+		markTaskActive: (projectPath: string, taskId: string) => Promise<void>
 	}
 
 	// Fetch proxy (bypasses Chromium connection limits)
@@ -618,3 +648,4 @@ declare global {
 		palot: PalotAPI
 	}
 }
+import type { ManagedSkill } from "../shared/skills"

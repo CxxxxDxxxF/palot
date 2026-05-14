@@ -15,20 +15,30 @@ import {
 	TimerIcon,
 	ZapIcon,
 } from "lucide-react"
-import { memo } from "react"
+import type React from "react"
+import { memo, useEffect, useState } from "react"
 import type { SubAgentEntry } from "../atoms/sub-agents"
 import { childSessionsFamily } from "../atoms/sub-agents"
 import { sessionMetricsFamily } from "../atoms/derived/session-metrics"
 import { sessionFamily } from "../atoms/sessions"
+import { useAgentActions } from "../hooks/use-server"
 import {
 	getAgentStatusBadgeClass,
 	getAgentStatusLabel,
 	getBudgetDisplay,
 } from "../lib/agent-progress-display"
+import {
+	evaluateAgentHeartbeat,
+	type AgentHeartbeatStatus,
+} from "../lib/agent-heartbeat"
+import { createLogger } from "../lib/logger"
 import { supervisionEventsForWorkflowFamily } from "../atoms/supervision-events"
 import type { AgentStatus } from "../lib/types"
-import { formatCost, formatTokens } from "../lib/session-metrics"
+import { formatCost, formatTokens, formatWorkDuration } from "../lib/session-metrics"
+import { evaluateAgentWorkflowPolicy } from "../lib/agent-workflow-policy"
 import { DEFAULT_SUPERVISION_POLICY, evaluateSupervisionPolicy } from "../lib/supervision-policy"
+
+const log = createLogger("multi-agent-panel")
 
 // ============================================================
 // Status display helpers
@@ -70,6 +80,28 @@ function statusAnimate(status: AgentStatus): string {
 	return ""
 }
 
+function heartbeatClass(status: AgentHeartbeatStatus): string {
+	switch (status) {
+		case "ACTIVE":
+			return "bg-emerald-400"
+		case "STALLED":
+			return "bg-amber-400"
+		case "UNRESPONSIVE":
+			return "bg-red-400"
+		default:
+			return "bg-muted-foreground/30"
+	}
+}
+
+function useHeartbeatNow(): number {
+	const [now, setNow] = useState(() => Date.now())
+	useEffect(() => {
+		const id = setInterval(() => setNow(Date.now()), 30_000)
+		return () => clearInterval(id)
+	}, [])
+	return now
+}
+
 // ============================================================
 // MultiAgentPanel
 // ============================================================
@@ -89,6 +121,8 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const parentEntry = useAtomValue(sessionFamily(parentSessionId))
 	const parentMetrics = useAtomValue(sessionMetricsFamily(parentSessionId))
 	const recentEvents = useAtomValue(supervisionEventsForWorkflowFamily(parentSessionId))
+	const now = useHeartbeatNow()
+	const { abort, sendPrompt } = useAgentActions()
 
 	if (children.length === 0 && parentMetrics.tokensRaw === 0) return null
 
@@ -123,6 +157,12 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 		cost: parentMetrics.cost,
 		tokensRaw: parentMetrics.tokensRaw,
 		tokens: parentMetrics.tokens,
+		toolCallCount: parentMetrics.toolCallCount,
+		errorCount: parentMetrics.errorCount,
+		lastActivityAt: parentEntry
+			? Math.max(parentEntry.session.time.updated, parentEntry.session.time.created)
+			: Date.now(),
+		directory: parentEntry?.directory ?? "",
 	}
 
 	const entries = [lead, ...children]
@@ -131,6 +171,14 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const totalCostFormatted = formatCost(totalCost)
 	const totalTokensFormatted = formatTokens(totalTokens)
 	const anyRunning = entries.some((c) => c.agentStatus === "running")
+	const runningChildren = children.filter((c) => c.agentStatus === "running").length
+	const workflowPolicy = evaluateAgentWorkflowPolicy({
+		workflowKind: runningChildren > 1 ? "research" : "shared_write",
+		runningAgentCount: runningChildren,
+		maxConcurrentAgents: DEFAULT_SUPERVISION_POLICY.maxConcurrentAgents,
+		hasFileLocking: false,
+		hasIsolatedFileOwnership: false,
+	})
 	const budget = getBudgetDisplay(totalCost)
 	const policy = evaluateSupervisionPolicy({
 		workflowId: parentSessionId,
@@ -184,6 +232,26 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							key={entry.sessionId}
 							entry={entry}
 							totalTokens={totalTokens}
+							now={now}
+							onRestart={async (target) => {
+								try {
+									await abort(target.directory, target.sessionId)
+									await sendPrompt(
+										target.directory,
+										target.sessionId,
+										"Restart from the last known objective. Summarize current state first, then continue with the next safe step.",
+									)
+								} catch (err) {
+									log.error("restart stalled agent failed", { sessionId: target.sessionId }, err)
+								}
+							}}
+							onTerminate={async (target) => {
+								try {
+									await abort(target.directory, target.sessionId)
+								} catch (err) {
+									log.error("terminate stalled agent failed", { sessionId: target.sessionId }, err)
+								}
+							}}
 						/>
 					))}
 					{policy.decision !== "allow" && (
@@ -196,6 +264,22 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							</div>
 							<p className="mt-1 leading-snug">{policy.operatorMessage}</p>
 							<p className="mt-1 leading-snug opacity-80">{policy.recommendedAction}</p>
+						</div>
+					)}
+					{children.length > 0 && (
+						<div className="rounded-md border border-border/30 bg-muted/15 px-2.5 py-2 text-[10px]">
+							<div className="flex items-center justify-between gap-2">
+								<span className="font-semibold uppercase tracking-wide text-muted-foreground">
+									Execution
+								</span>
+								<span className="font-medium uppercase tabular-nums text-muted-foreground/70">
+									{workflowPolicy.mode}
+								</span>
+							</div>
+							<p className="mt-1 leading-snug text-muted-foreground/70">
+								Parallel is supported for planning, research, docs, and isolated file ownership.
+								Shared writes stay sequential unless locking is available.
+							</p>
 						</div>
 					)}
 					{recentEvents.length > 0 && (
@@ -259,13 +343,30 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 // Per-sub-agent row
 // ============================================================
 
-function SubAgentRow({ entry, totalTokens }: { entry: SubAgentEntry; totalTokens: number }) {
+function SubAgentRow({
+	entry,
+	totalTokens,
+	now,
+	onRestart,
+	onTerminate,
+}: {
+	entry: SubAgentEntry
+	totalTokens: number
+	now: number
+	onRestart: (entry: SubAgentEntry) => Promise<void>
+	onTerminate: (entry: SubAgentEntry) => Promise<void>
+}) {
 	const navigate = useNavigate()
 	const { projectSlug } = useParams({ strict: false }) as { projectSlug?: string }
 
 	const Icon = statusIcon(entry.agentStatus)
 	const iconColor = statusColor(entry.agentStatus)
 	const iconAnim = statusAnimate(entry.agentStatus)
+	const heartbeat = evaluateAgentHeartbeat({
+		agentStatus: entry.agentStatus,
+		lastActivityAt: entry.lastActivityAt,
+		now,
+	})
 	const progress =
 		totalTokens > 0 ? Math.max(4, Math.min(100, (entry.tokensRaw / totalTokens) * 100)) : 0
 
@@ -276,20 +377,40 @@ function SubAgentRow({ entry, totalTokens }: { entry: SubAgentEntry; totalTokens
 			params: { projectSlug, sessionId: entry.sessionId },
 		})
 	}
+	const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+		if (event.key === "Enter" || event.key === " ") {
+			event.preventDefault()
+			handleClick()
+		}
+	}
+	const handleRestart = (event: React.MouseEvent<HTMLButtonElement>) => {
+		event.stopPropagation()
+		onRestart(entry)
+	}
+	const handleTerminate = (event: React.MouseEvent<HTMLButtonElement>) => {
+		event.stopPropagation()
+		onTerminate(entry)
+	}
 
 	return (
 		<Tooltip>
 			<TooltipTrigger
 				render={
-					<button
-						type="button"
+					<div
+						role="button"
+						tabIndex={0}
 						onClick={handleClick}
+						onKeyDown={handleKeyDown}
 						className="group/agent w-full rounded-md border border-transparent px-2 py-1.5 text-left transition-colors hover:border-border/40 hover:bg-muted/45"
 					/>
 				}
 			>
 				<div className="space-y-1">
 					<div className="flex items-center gap-2">
+						<span
+							className={cn("size-1.5 rounded-full", heartbeatClass(heartbeat.status))}
+							aria-hidden="true"
+						/>
 						<Icon
 							className={`size-3 shrink-0 ${iconColor} ${iconAnim}`}
 							aria-hidden="true"
@@ -309,6 +430,39 @@ function SubAgentRow({ entry, totalTokens }: { entry: SubAgentEntry; totalTokens
 							{getAgentStatusLabel(entry.agentStatus)}
 						</span>
 					</div>
+					{heartbeat.status === "STALLED" || heartbeat.status === "UNRESPONSIVE" ? (
+						<div
+							className={cn(
+								"ml-5 rounded-md border px-2 py-1 text-[10px]",
+								heartbeat.status === "UNRESPONSIVE"
+									? "border-red-400/30 bg-red-400/10 text-red-200"
+									: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+							)}
+						>
+							<div className="flex items-center justify-between gap-2">
+								<span className="font-semibold uppercase tracking-wide">{heartbeat.status}</span>
+								<span className="tabular-nums">
+									{formatWorkDuration(heartbeat.idleMs)} idle
+								</span>
+							</div>
+							<div className="mt-1 flex gap-1">
+								<button
+									type="button"
+									onClick={handleRestart}
+									className="rounded border border-current/20 px-1.5 py-0.5 font-medium hover:bg-current/10"
+								>
+									Restart
+								</button>
+								<button
+									type="button"
+									onClick={handleTerminate}
+									className="rounded border border-current/20 px-1.5 py-0.5 font-medium hover:bg-current/10"
+								>
+									Terminate
+								</button>
+							</div>
+						</div>
+					) : null}
 					<div className="truncate pl-5 text-[11px] leading-tight text-muted-foreground/65">
 						{entry.activity ?? "Waiting for work"}
 					</div>
@@ -316,6 +470,24 @@ function SubAgentRow({ entry, totalTokens }: { entry: SubAgentEntry; totalTokens
 						<span>{entry.tokensRaw > 0 ? entry.tokens : "0 tok"}</span>
 						<span>·</span>
 						<span>{entry.costRaw > 0 ? entry.cost : "$0.00"}</span>
+						{entry.duration && entry.duration !== "0s" && (
+							<>
+								<span>·</span>
+								<span>{entry.duration}</span>
+							</>
+						)}
+						{entry.toolCallCount > 0 && (
+							<>
+								<span>·</span>
+								<span>{entry.toolCallCount} tools</span>
+							</>
+						)}
+						{entry.errorCount > 0 && (
+							<>
+								<span>·</span>
+								<span className="text-red-400">{entry.errorCount} err</span>
+							</>
+						)}
 						{entry.model && (
 							<>
 								<span>·</span>
@@ -340,11 +512,20 @@ function SubAgentRow({ entry, totalTokens }: { entry: SubAgentEntry; totalTokens
 			</TooltipTrigger>
 			<TooltipContent side="right">
 				<p className="font-medium">{entry.name}</p>
+				<p className="text-muted-foreground">
+					Heartbeat: {heartbeat.label}
+					{heartbeat.status === "ACTIVE" ? "" : ` · ${formatWorkDuration(heartbeat.idleMs)} idle`}
+				</p>
 				{entry.activity && <p className="text-muted-foreground">{entry.activity}</p>}
 				{entry.tokensRaw > 0 && (
 					<p className="text-muted-foreground">
 						{entry.tokens} tokens · {entry.cost}
+						{entry.toolCallCount > 0 && ` · ${entry.toolCallCount} tool calls`}
+						{entry.duration && entry.duration !== "0s" && ` · ${entry.duration}`}
 					</p>
+				)}
+				{entry.errorCount > 0 && (
+					<p className="text-red-400">{entry.errorCount} error{entry.errorCount !== 1 ? "s" : ""}</p>
 				)}
 			</TooltipContent>
 		</Tooltip>

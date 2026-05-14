@@ -271,8 +271,43 @@ contextBridge.exposeInMainWorld("palot", {
 
 	skills: {
 		list: () => ipcRenderer.invoke("skills:list"),
+		listAll: () => ipcRenderer.invoke("skills:list-all"),
+		importGitHub: (url: string) => ipcRenderer.invoke("skills:import-github", url),
 		write: (filename: string, raw: string) => ipcRenderer.invoke("skills:write", filename, raw),
 		delete: (filename: string) => ipcRenderer.invoke("skills:delete", filename),
+		brainSummary: () => ipcRenderer.invoke("skills:brain-summary"),
+	},
+
+	// --- Brain ---
+
+	brain: {
+		list: (projectPath?: string) => ipcRenderer.invoke("brain:list", projectPath),
+		read: (slug: string, projectPath?: string) => ipcRenderer.invoke("brain:read", slug, projectPath),
+		write: (slug: string, content: string, projectPath?: string) => ipcRenderer.invoke("brain:write", slug, content, projectPath),
+		delete: (slug: string, projectPath?: string) => ipcRenderer.invoke("brain:delete", slug, projectPath),
+		search: (keyword: string, projectPath?: string) => ipcRenderer.invoke("brain:search", keyword, projectPath),
+		summary: () => ipcRenderer.invoke("skills:brain-summary"),
+		contextSummary: (projectPath: string, sessionId?: string) => ipcRenderer.invoke("brain:context-summary", projectPath, sessionId),
+	},
+
+	// --- Tasks ---
+
+	tasks: {
+		load: () => ipcRenderer.invoke("tasks:load"),
+		upsert: (task: unknown) => ipcRenderer.invoke("tasks:upsert", task),
+		updateStatus: (taskId: string, status: string) => ipcRenderer.invoke("tasks:update-status", taskId, status),
+		executionPlan: (tasks: unknown[]) => ipcRenderer.invoke("tasks:execution-plan", tasks),
+		routeModel: (taskOrText: unknown) => ipcRenderer.invoke("tasks:route-model", taskOrText),
+	},
+
+	// --- Supervisor ---
+
+	supervisor: {
+		load: (projectPath: string) => ipcRenderer.invoke("supervisor:load", projectPath),
+		save: (projectPath: string, state: unknown) => ipcRenderer.invoke("supervisor:save", projectPath, state),
+		appendOutput: (projectPath: string, output: unknown) => ipcRenderer.invoke("supervisor:append-output", projectPath, output),
+		setMilestone: (projectPath: string, milestone: string) => ipcRenderer.invoke("supervisor:set-milestone", projectPath, milestone),
+		markTaskActive: (projectPath: string, taskId: string) => ipcRenderer.invoke("supervisor:mark-task-active", projectPath, taskId),
 	},
 
 	// --- Onboarding ---
