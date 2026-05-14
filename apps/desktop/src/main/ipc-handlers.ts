@@ -55,6 +55,7 @@ import { KnowledgeGraphService } from "./knowledge-graph-service"
 import type { KnowledgeEntry, KnowledgeQueryOptions } from "./knowledge-graph-service"
 import { TaskGraphService } from "./task-graph-service"
 import { routeTask, routePrompt } from "./model-routing-service"
+import { SemanticIndexService } from "./semantic-index-service"
 import { SupervisorStateService } from "./supervisor-state-service"
 import type { SubagentOutput } from "./supervisor-state-service"
 import { getOpaqueWindows, getSettings, onSettingsChanged, updateSettings } from "./settings-store"
@@ -768,6 +769,16 @@ export function registerIpcHandlers(): void {
 
 	ipcMain.handle("knowledge:context", withLogging("knowledge:context", (_, projectPath: string, forPrompt?: string) => {
 		return getKg(projectPath).getContext(forPrompt)
+	}))
+
+	// --- Semantic index ---
+
+	ipcMain.handle("semantic:build", withLogging("semantic:build", (_, projectPath: string) => {
+		return new SemanticIndexService(getBrainService(projectPath)).build(projectPath)
+	}))
+
+	ipcMain.handle("semantic:search", withLogging("semantic:search", (_, projectPath: string, query: string, limit?: number) => {
+		return new SemanticIndexService(getBrainService(projectPath)).search(query, limit)
 	}))
 
 	// --- Settings push channel (main -> renderer) ---

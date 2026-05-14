@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ProjectBrainService } from "./project-brain-service"
-import { KnowledgeGraphService } from "./knowledge-graph-service"
+import { KnowledgeGraphService, tokenizeForBM25, scoreBM25 } from "./knowledge-graph-service"
 
 async function makeService() {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-kg-"))
@@ -34,7 +34,6 @@ describe("KnowledgeGraphService", () => {
 			await cleanup()
 		}
 	})
-
 	test("query by type returns only matching type", async () => {
 		const { kg, cleanup } = await makeService()
 		try {
@@ -116,5 +115,100 @@ describe("KnowledgeGraphService", () => {
 		} finally {
 			await cleanup()
 		}
+	})
+
+	test("BM25 keyword query ranks more relevant entry higher", async () => {
+		const { kg, cleanup } = await makeService()
+		try {
+			await kg.add({
+				type: "lesson",
+				title: "Database connection pooling",
+				body: "Always use connection pooling for database access to avoid exhausting connections",
+				tags: ["database", "performance"],
+				relatedFiles: [],
+			})
+			await kg.add({
+				type: "lesson",
+				title: "React memo patterns",
+				body: "Use React.memo with named function expressions for performance-critical sub-components",
+				tags: ["react", "performance"],
+				relatedFiles: [],
+			})
+			await kg.add({
+				type: "lesson",
+				title: "Database migration safety",
+				body: "Run database migrations in a transaction and always test rollback before deploying",
+				tags: ["database", "safety"],
+				relatedFiles: [],
+			})
+
+			const results = await kg.query({ keyword: "database connection pool" })
+			expect(results.length).toBeGreaterThan(0)
+			// The entry about "connection pooling" should rank first — it has all three terms
+			expect(results[0].title).toBe("Database connection pooling")
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test("BM25 matches short keywords that were previously dropped", async () => {
+		const { kg, cleanup } = await makeService()
+		try {
+			await kg.add({ type: "lesson", title: "IPC bug", body: "The IPC layer has a race condition", tags: ["ipc"], relatedFiles: [] })
+			await kg.add({ type: "lesson", title: "CSS fix", body: "Tailwind v4 requires source directive", tags: ["css"], relatedFiles: [] })
+
+			// "ipc" is only 3 chars — the old code dropped words with length <= 3
+			const results = await kg.query({ keyword: "ipc" })
+			expect(results).toHaveLength(1)
+			expect(results[0].title).toBe("IPC bug")
+		} finally {
+			await cleanup()
+		}
+	})
+})
+
+// ============================================================
+// BM25 helpers — unit tests
+// ============================================================
+
+describe("tokenizeForBM25", () => {
+	test("lowercases and splits on non-alphanumeric", () => {
+		const tokens = tokenizeForBM25("Hello World! foo-bar_baz")
+		expect(tokens).toEqual(["hello", "world", "foo", "bar", "baz"])
+	})
+
+	test("filters empty tokens", () => {
+		const tokens = tokenizeForBM25("  ...  ")
+		expect(tokens).toEqual([])
+	})
+
+	test("keeps single-character tokens", () => {
+		const tokens = tokenizeForBM25("A B C")
+		expect(tokens).toEqual(["a", "b", "c"])
+	})
+})
+
+describe("scoreBM25", () => {
+	test("returns empty array for empty documents", () => {
+		expect(scoreBM25(["test"], [])).toEqual([])
+	})
+
+	test("scores document with matching term higher than without", () => {
+		const docs = [
+			"the database connection pool is important",
+			"react components use hooks for state management",
+		]
+		const scores = scoreBM25(["database", "connection"], docs)
+		expect(scores[0].score).toBeGreaterThan(scores[1].score)
+	})
+
+	test("document with more matching terms scores higher", () => {
+		const docs = [
+			"database connection pool optimization for better performance",
+			"database schema migration tool",
+		]
+		const scores = scoreBM25(["database", "connection", "pool"], docs)
+		// First doc has all three terms, second has only one
+		expect(scores[0].score).toBeGreaterThan(scores[1].score)
 	})
 })

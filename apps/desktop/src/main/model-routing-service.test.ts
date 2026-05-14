@@ -4,6 +4,9 @@ import {
 	routePrompt,
 	routeTask,
 	MODEL_TIERS,
+	resolveAvailableModel,
+	routeTaskResolved,
+	routePromptResolved,
 } from "./model-routing-service"
 import type { BrainTask } from "../shared/tasks"
 
@@ -101,5 +104,64 @@ describe("routeTask", () => {
 	test("ignores whitespace-only recommendedModel", () => {
 		const task = makeTask("builder", "medium", "   ")
 		expect(routeTask(task)).toBe(MODEL_TIERS.medium)
+	})
+})
+
+// ============================================================
+// resolveAvailableModel
+// ============================================================
+
+describe("resolveAvailableModel", () => {
+	test("returns preferred model when exact match found", () => {
+		const available = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-7"]
+		expect(resolveAvailableModel("claude-sonnet-4-6", available)).toBe("claude-sonnet-4-6")
+	})
+
+	test("returns fuzzy match when preferred is substring of available", () => {
+		const available = ["anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-7"]
+		expect(resolveAvailableModel("claude-sonnet-4-6", available)).toBe("anthropic/claude-sonnet-4-6")
+	})
+
+	test("falls back to same-tier model when no exact or fuzzy match", () => {
+		const available = ["google/gemini-pro-2.5", "anthropic/claude-opus-4-7"]
+		// "claude-sonnet-4-6" is medium tier, gemini-pro is also medium tier (has "pro")
+		expect(resolveAvailableModel("claude-sonnet-4-6", available)).toBe("google/gemini-pro-2.5")
+	})
+
+	test("falls back to any available model when no tier match", () => {
+		const available = ["openrouter/deepseek/deepseek-chat"]
+		expect(resolveAvailableModel("claude-opus-4-7", available)).toBe("openrouter/deepseek/deepseek-chat")
+	})
+
+	test("returns preferred model unchanged when no available models", () => {
+		expect(resolveAvailableModel("claude-opus-4-7", [])).toBe("claude-opus-4-7")
+	})
+
+	test("fuzzy matches base name without version suffix", () => {
+		const available = ["anthropic/claude-haiku-4-5-latest"]
+		expect(resolveAvailableModel("claude-haiku-4-5-20251001", available)).toBe("anthropic/claude-haiku-4-5-latest")
+	})
+})
+
+// ============================================================
+// routeTaskResolved / routePromptResolved
+// ============================================================
+
+describe("routeTaskResolved", () => {
+	test("resolves to available model when preferred tier exists", () => {
+		const available = ["my-haiku", "my-sonnet", "my-opus"]
+		// docs + low → haiku tier, but haiku not in available list by exact name
+		// Falls to any available (my-haiku has no tier indicator)
+		const result = routeTaskResolved(makeTask("docs", "low"), available)
+		expect(available).toContain(result)
+	})
+})
+
+describe("routePromptResolved", () => {
+	test("resolves prompt to available model", () => {
+		const available = ["anthropic/claude-haiku-4-5-latest"]
+		const result = routePromptResolved("list all files", available)
+		// "list all files" → low → haiku → fuzzy match to available haiku
+		expect(result).toBe("anthropic/claude-haiku-4-5-latest")
 	})
 })

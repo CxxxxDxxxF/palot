@@ -52,6 +52,8 @@ Palot spawns and manages the OpenCode server automatically, streams responses in
 
 - **Sub-agent cards** -- Live activity cards for delegated tasks, with collapsible child session views and automatic collapse on completion.
 
+- **Hive Mind progress** -- Lead Agent orchestration sessions show live sub-agent progress, budget mode, token/cost totals, and handoff summaries. See [Hive Mind UI validation](docs/swarm-ui-validation.md) for the engineering smoke-test flow.
+
 - **Model and agent selector** -- Searchable model picker across all connected providers (Anthropic, OpenAI, Google, and more), with reasoning variant support, a "recently used" section, and favorites. Switch between available agents.
 
 - **Permission management** -- Inline approve/deny UI for agent permission requests, with "allow once" and "allow always" options.
@@ -202,6 +204,15 @@ The desktop app has three runtime contexts:
 - **Main process** (Node.js) -- Window management, IPC handlers, OpenCode server lifecycle, automation scheduler
 - **Preload** -- Secure bridge exposing `window.palot` API via `contextBridge`
 - **Renderer** (Chromium) -- React app with components, hooks, services, and Jotai atoms
+
+Engineering docs:
+
+- [Architecture](docs/ARCHITECTURE.md) -- process boundaries, data flow, automation, skills, and known architecture risks
+- [Development Guide](docs/DEVELOPMENT_GUIDE.md) -- coding standards, naming conventions, IPC rules, and contribution workflow
+- [API Reference](docs/API_REFERENCE.md) -- browser-mode HTTP routes and Electron IPC domains
+- [Database Schema](docs/DATABASE_SCHEMA.md) -- automation tables, indexes, relationships, and migration rules
+- [Engineering Audit](docs/ENGINEERING_AUDIT.md) -- current technical debt, completed refactors, and remaining recommendations
+- [Hive Mind UI Validation](docs/swarm-ui-validation.md) -- smoke-test flow for Lead-Agent orchestration progress
 
 <br>
 

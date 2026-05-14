@@ -590,3 +590,23 @@ export async function getKnowledgeContext(projectPath: string, forPrompt?: strin
 	if (isElectron) return window.palot.knowledge.context(projectPath, forPrompt)
 	throw new Error("Knowledge graph is only available in Electron mode")
 }
+
+// ============================================================
+// Semantic index — Electron-only
+// ============================================================
+
+export async function buildSemanticIndex(
+	projectPath: string,
+): Promise<import("../../main/semantic-index-service").SemanticIndex> {
+	if (isElectron) return window.palot.semantic.build(projectPath)
+	throw new Error("Semantic index is only available in Electron mode")
+}
+
+export async function searchSemantic(
+	projectPath: string,
+	query: string,
+	limit?: number,
+): Promise<import("../../main/semantic-index-service").SemanticSearchResult[]> {
+	if (isElectron) return window.palot.semantic.search(projectPath, query, limit)
+	throw new Error("Semantic index is only available in Electron mode")
+}

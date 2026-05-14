@@ -5,6 +5,7 @@ import { serverConnectedAtom } from "../connection"
 import { discoveryAtom } from "../discovery"
 import { removeMessageAtom, upsertMessageAtom } from "../messages"
 import { applyPartDeltaAtom, removePartAtom, upsertPartAtom } from "../parts"
+import { recordSessionActivityAtom } from "../session-heartbeats"
 import {
 	addPermissionAtom,
 	addQuestionAtom,
@@ -21,6 +22,36 @@ import { todosFamily } from "../todos"
 import { setSessionDiffAtom } from "../ui"
 
 const log = createLogger("event-processor")
+
+function getEventSessionId(event: Event): string | undefined {
+	switch (event.type) {
+		case "session.created":
+		case "session.updated":
+		case "session.deleted":
+			return event.properties.info.id
+		case "session.status":
+		case "session.error":
+		case "permission.replied":
+		case "question.replied":
+		case "question.rejected":
+		case "message.removed":
+		case "message.part.removed":
+		case "todo.updated":
+		case "session.diff":
+			return event.properties.sessionID
+		case "permission.asked":
+		case "question.asked":
+			return event.properties.sessionID
+		case "message.updated":
+			return event.properties.info.sessionID
+		case "message.part.updated":
+			return event.properties.part.sessionID
+		case "message.part.delta":
+			return event.properties.sessionID
+		default:
+			return undefined
+	}
+}
 
 /**
  * Invalidate all OpenCode data queries for a specific directory.
@@ -51,6 +82,10 @@ function invalidateAllQueries(): void {
  */
 export function processEvent(event: Event): void {
 	const { set } = appStore
+	const sessionId = getEventSessionId(event)
+	if (sessionId) {
+		set(recordSessionActivityAtom, { sessionId })
+	}
 
 	switch (event.type) {
 		case "server.connected":

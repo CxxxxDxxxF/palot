@@ -108,7 +108,7 @@ export class KnowledgeGraphService {
 		const slugs = await this.brain.listFiles()
 		const kgSlugs = slugs.filter((s) => s.startsWith(SLUG_PREFIX))
 
-		const entries: KnowledgeEntry[] = []
+		const candidates: { entry: KnowledgeEntry; text: string }[] = []
 		for (const slug of kgSlugs) {
 			const content = await this.brain.readFile(slug)
 			if (!content) continue
@@ -116,24 +116,41 @@ export class KnowledgeGraphService {
 			if (!entry) continue
 
 			if (type && entry.type !== type) continue
-			if (keyword) {
-				const lower = `${entry.title} ${entry.body} ${entry.tags.join(" ")}`.toLowerCase()
-				const words = keyword.toLowerCase().split(/\s+/).filter((w) => w.length > 3)
-				const match = words.length === 0
-					? lower.includes(keyword.toLowerCase())
-					: words.some((w) => lower.includes(w))
-				if (!match) continue
-			}
 			if (relatedFile) {
 				const norm = relatedFile.replace(/\\/g, "/")
 				if (!entry.relatedFiles.some((f) => f.replace(/\\/g, "/").includes(norm))) continue
 			}
 
-			entries.push(entry)
-			if (entries.length >= limit) break
+			const text = `${entry.title} ${entry.body} ${entry.tags.join(" ")}`.toLowerCase()
+			candidates.push({ entry, text })
 		}
 
-		return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+		// No keyword — return most recent
+		if (!keyword) {
+			return candidates
+				.map((c) => c.entry)
+				.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+				.slice(0, limit)
+		}
+
+		// BM25 scoring
+		const queryTokens = tokenizeForBM25(keyword)
+		if (queryTokens.length === 0) {
+			return candidates
+				.map((c) => c.entry)
+				.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+				.slice(0, limit)
+		}
+
+		const docTexts = candidates.map((c) => c.text)
+		const scored = scoreBM25(queryTokens, docTexts)
+
+		return scored
+			.map((s) => ({ entry: candidates[s.index].entry, score: s.score }))
+			.filter((s) => s.score > 0)
+			.sort((a, b) => b.score - a.score)
+			.slice(0, limit)
+			.map((s) => s.entry)
 	}
 
 	async remove(id: string): Promise<boolean> {
@@ -174,4 +191,87 @@ export class KnowledgeGraphService {
 
 		return sections.join("\n\n")
 	}
+}
+
+// ============================================================
+// BM25 scoring helpers
+// ============================================================
+
+/** Tokenize text for BM25: lowercase, split on non-alphanumeric, filter empties. */
+export function tokenizeForBM25(text: string): string[] {
+	return text
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter((t) => t.length >= 1)
+}
+
+interface BM25Score {
+	index: number
+	score: number
+}
+
+/**
+ * Score documents against query tokens using BM25.
+ *
+ * Standard BM25 parameters: k1 = 1.5, b = 0.75
+ */
+export function scoreBM25(
+	queryTokens: string[],
+	documents: string[],
+	k1 = 1.5,
+	b = 0.75,
+): BM25Score[] {
+	const N = documents.length
+	if (N === 0) return []
+
+	// Tokenize all documents
+	const docTokens = documents.map(tokenizeForBM25)
+
+	// Average document length
+	const avgDl =
+		docTokens.reduce((sum, dt) => sum + dt.length, 0) / N
+
+	// Document frequency for each query term
+	const df: Record<string, number> = {}
+	for (const term of queryTokens) {
+		df[term] = 0
+		for (const dt of docTokens) {
+			if (dt.includes(term)) {
+				df[term]++
+			}
+		}
+	}
+
+	// Score each document
+	const scores: BM25Score[] = []
+	for (let i = 0; i < N; i++) {
+		const dl = docTokens[i].length
+		let score = 0
+
+		// Term frequency in this document
+		const tf: Record<string, number> = {}
+		for (const t of docTokens[i]) {
+			tf[t] = (tf[t] ?? 0) + 1
+		}
+
+		for (const term of queryTokens) {
+			const termDf = df[term] ?? 0
+			const termTf = tf[term] ?? 0
+			if (termTf === 0 || termDf === 0) continue
+
+			// IDF component: log((N - df + 0.5) / (df + 0.5) + 1)
+			const idf = Math.log((N - termDf + 0.5) / (termDf + 0.5) + 1)
+
+			// TF component with length normalization
+			const tfNorm =
+				(termTf * (k1 + 1)) /
+				(termTf + k1 * (1 - b + b * (dl / avgDl)))
+
+			score += idf * tfNorm
+		}
+
+		scores.push({ index: i, score })
+	}
+
+	return scores
 }

@@ -319,6 +319,13 @@ contextBridge.exposeInMainWorld("palot", {
 		markTaskActive: (projectPath: string, taskId: string) => ipcRenderer.invoke("supervisor:mark-task-active", projectPath, taskId),
 	},
 
+	// --- Semantic index ---
+
+	semantic: {
+		build: (projectPath: string) => ipcRenderer.invoke("semantic:build", projectPath),
+		search: (projectPath: string, query: string, limit?: number) => ipcRenderer.invoke("semantic:search", projectPath, query, limit),
+	},
+
 	// --- Onboarding ---
 
 	onboarding: {

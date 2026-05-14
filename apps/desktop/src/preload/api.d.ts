@@ -570,6 +570,12 @@ export interface PalotAPI {
 		markTaskActive: (projectPath: string, taskId: string) => Promise<void>
 	}
 
+	// Semantic index
+	semantic: {
+		build: (projectPath: string) => Promise<import("../main/semantic-index-service").SemanticIndex>
+		search: (projectPath: string, query: string, limit?: number) => Promise<import("../main/semantic-index-service").SemanticSearchResult[]>
+	}
+
 	// Fetch proxy (bypasses Chromium connection limits)
 	fetch: (req: {
 		url: string

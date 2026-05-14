@@ -30,6 +30,7 @@ import {
 	SparklesIcon,
 } from "lucide-react"
 import { useCallback, useMemo, useState } from "react"
+import { contextCompactionActionFamily } from "../../atoms/context-compaction"
 import { messagesFamily } from "../../atoms/messages"
 import type { DisplayMode } from "../../atoms/preferences"
 import { useDisplayMode, useSetDisplayMode } from "../../hooks/use-agents"
@@ -44,6 +45,7 @@ import type {
 	VcsData,
 } from "../../hooks/use-opencode-data"
 import { getModelVariants, parseModelRef } from "../../hooks/use-opencode-data"
+import { evaluateContextCompactionPolicy } from "../../lib/context-compaction-policy"
 import {
 	computeContextUsage,
 	formatPercentage,
@@ -700,6 +702,7 @@ function ContextUsageIndicator({
 	compaction?: CompactionConfig
 }) {
 	const messages = useAtomValue(messagesFamily(sessionId))
+	const actionState = useAtomValue(contextCompactionActionFamily(sessionId))
 
 	const getModelLimit = useCallback(
 		(providerID: string, modelID: string): ModelLimitInfo | undefined => {
@@ -726,8 +729,22 @@ function ContextUsageIndicator({
 
 	if (!usage) return null
 
+	const policy = evaluateContextCompactionPolicy({
+		usage,
+		isCompacting: actionState.state === "AUTO_COMPACTING",
+		wasCompacted: actionState.state === "COMPACTED" && Date.now() - actionState.updatedAt < 10_000,
+		autoCompactionEnabled: compaction?.auto !== false,
+	})
+
 	const pct = usage.percentage
-	const color = pct >= 90 ? "text-red-400" : pct >= 70 ? "text-yellow-400" : ""
+	const color =
+		policy.state === "BLOCKED_UNTIL_COMPACTED"
+			? "text-red-400"
+			: policy.state === "AUTO_COMPACTING" || policy.state === "COMPACTION_SUGGESTED"
+				? "text-yellow-400"
+				: pct >= 70
+					? "text-yellow-400"
+					: ""
 
 	const compPct = usage.compactionPercentage
 	const compColor =
@@ -751,6 +768,9 @@ function ContextUsageIndicator({
 			>
 				<ContextCircle percentage={pct} size={12} strokeWidth={1.5} />
 				<span>{formatPercentage(pct)}</span>
+				{policy.state !== "NORMAL" && (
+					<span className="hidden uppercase tracking-wide sm:inline">{policy.state.replaceAll("_", " ")}</span>
+				)}
 			</TooltipTrigger>
 			<TooltipContent side="top" align="end">
 				<div className="space-y-1.5 text-xs">
@@ -783,6 +803,10 @@ function ContextUsageIndicator({
 							</div>
 						</div>
 					)}
+					<div className="border-t border-background/15 pt-1 text-background/60">
+						<p className={cn("font-medium", color)}>{policy.state.replaceAll("_", " ")}</p>
+						<p>{policy.recommendedAction}</p>
+					</div>
 				</div>
 			</TooltipContent>
 		</Tooltip>

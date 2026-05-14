@@ -48,5 +48,8 @@ AGENTS.local.md
 # Local working directory
 .local/
 
+# Local launch helpers
+Launch Palot.command*
+
 # OMC state
 .omc/
