@@ -51,6 +51,8 @@ import { getOpenInTargets, openInTarget, setPreferredTarget } from "./open-in-ta
 import { ensureServer, getServerUrl, restartServer, stopServer } from "./opencode-manager"
 import { createProjectDirectory } from "./project-directory-service"
 import { ProjectBrainService } from "./project-brain-service"
+import { KnowledgeGraphService } from "./knowledge-graph-service"
+import type { KnowledgeEntry, KnowledgeQueryOptions } from "./knowledge-graph-service"
 import { TaskGraphService } from "./task-graph-service"
 import { routeTask, routePrompt } from "./model-routing-service"
 import { SupervisorStateService } from "./supervisor-state-service"
@@ -744,6 +746,28 @@ export function registerIpcHandlers(): void {
 
 	ipcMain.handle("supervisor:mark-task-active", withLogging("supervisor:mark-task-active", (_, projectPath: string, taskId: string) => {
 		return new SupervisorStateService(getBrainService(projectPath)).markTaskActive(taskId)
+	}))
+
+	// --- Knowledge graph ---
+
+	function getKg(projectPath?: string) {
+		return new KnowledgeGraphService(getBrainService(projectPath))
+	}
+
+	ipcMain.handle("knowledge:add", withLogging("knowledge:add", (_, projectPath: string, entry: Omit<KnowledgeEntry, "id" | "createdAt" | "updatedAt">) => {
+		return getKg(projectPath).add(entry)
+	}))
+
+	ipcMain.handle("knowledge:query", withLogging("knowledge:query", (_, projectPath: string, options: KnowledgeQueryOptions) => {
+		return getKg(projectPath).query(options)
+	}))
+
+	ipcMain.handle("knowledge:remove", withLogging("knowledge:remove", (_, projectPath: string, id: string) => {
+		return getKg(projectPath).remove(id)
+	}))
+
+	ipcMain.handle("knowledge:context", withLogging("knowledge:context", (_, projectPath: string, forPrompt?: string) => {
+		return getKg(projectPath).getContext(forPrompt)
 	}))
 
 	// --- Settings push channel (main -> renderer) ---

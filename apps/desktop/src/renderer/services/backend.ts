@@ -560,3 +560,33 @@ export async function previewAutomationSchedule(
 	}
 	throw new Error("Automations are only available in Electron mode")
 }
+
+// ============================================================
+// Knowledge graph — Electron-only
+// ============================================================
+
+export async function addKnowledge(
+	projectPath: string,
+	entry: Omit<import("../../main/knowledge-graph-service").KnowledgeEntry, "id" | "createdAt" | "updatedAt">,
+): Promise<import("../../main/knowledge-graph-service").KnowledgeEntry> {
+	if (isElectron) return window.palot.knowledge.add(projectPath, entry)
+	throw new Error("Knowledge graph is only available in Electron mode")
+}
+
+export async function queryKnowledge(
+	projectPath: string,
+	options: import("../../main/knowledge-graph-service").KnowledgeQueryOptions,
+): Promise<import("../../main/knowledge-graph-service").KnowledgeEntry[]> {
+	if (isElectron) return window.palot.knowledge.query(projectPath, options)
+	throw new Error("Knowledge graph is only available in Electron mode")
+}
+
+export async function removeKnowledge(projectPath: string, id: string): Promise<boolean> {
+	if (isElectron) return window.palot.knowledge.remove(projectPath, id)
+	throw new Error("Knowledge graph is only available in Electron mode")
+}
+
+export async function getKnowledgeContext(projectPath: string, forPrompt?: string): Promise<string> {
+	if (isElectron) return window.palot.knowledge.context(projectPath, forPrompt)
+	throw new Error("Knowledge graph is only available in Electron mode")
+}

@@ -300,6 +300,15 @@ contextBridge.exposeInMainWorld("palot", {
 		routeModel: (taskOrText: unknown) => ipcRenderer.invoke("tasks:route-model", taskOrText),
 	},
 
+	// --- Knowledge graph ---
+
+	knowledge: {
+		add: (projectPath: string, entry: unknown) => ipcRenderer.invoke("knowledge:add", projectPath, entry),
+		query: (projectPath: string, options: unknown) => ipcRenderer.invoke("knowledge:query", projectPath, options),
+		remove: (projectPath: string, id: string) => ipcRenderer.invoke("knowledge:remove", projectPath, id),
+		context: (projectPath: string, forPrompt?: string) => ipcRenderer.invoke("knowledge:context", projectPath, forPrompt),
+	},
+
 	// --- Supervisor ---
 
 	supervisor: {

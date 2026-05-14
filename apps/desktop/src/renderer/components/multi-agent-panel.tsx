@@ -32,6 +32,7 @@ import {
 	type AgentHeartbeatStatus,
 } from "../lib/agent-heartbeat"
 import { createLogger } from "../lib/logger"
+import { useSubAgentCompletion } from "../hooks/use-subagent-completion"
 import { supervisionEventsForWorkflowFamily } from "../atoms/supervision-events"
 import type { AgentStatus } from "../lib/types"
 import { formatCost, formatTokens, formatWorkDuration } from "../lib/session-metrics"
@@ -123,6 +124,9 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const recentEvents = useAtomValue(supervisionEventsForWorkflowFamily(parentSessionId))
 	const now = useHeartbeatNow()
 	const { abort, sendPrompt } = useAgentActions()
+
+	// Feature 7: auto-record subagent completions to supervisor state
+	useSubAgentCompletion(parentSessionId, parentEntry?.directory)
 
 	if (children.length === 0 && parentMetrics.tokensRaw === 0) return null
 

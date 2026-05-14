@@ -553,6 +553,14 @@ export interface PalotAPI {
 		routeModel: (taskOrText: import("../shared/tasks").BrainTask | string) => Promise<string>
 	}
 
+	// Knowledge graph
+	knowledge: {
+		add: (projectPath: string, entry: Omit<import("../main/knowledge-graph-service").KnowledgeEntry, "id" | "createdAt" | "updatedAt">) => Promise<import("../main/knowledge-graph-service").KnowledgeEntry>
+		query: (projectPath: string, options: import("../main/knowledge-graph-service").KnowledgeQueryOptions) => Promise<import("../main/knowledge-graph-service").KnowledgeEntry[]>
+		remove: (projectPath: string, id: string) => Promise<boolean>
+		context: (projectPath: string, forPrompt?: string) => Promise<string>
+	}
+
 	// Supervisor state
 	supervisor: {
 		load: (projectPath: string) => Promise<import("../main/supervisor-state-service").SupervisorState>
