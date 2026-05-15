@@ -15,6 +15,11 @@ import {
 	SupervisionPolicyError,
 	type SupervisedAgentState,
 } from "../lib/supervision-policy"
+import {
+	getProjectTrustProfile,
+	rememberPermissionApproval,
+	type PermissionLike,
+} from "../lib/trust-permissions"
 import type {
 	FileAttachment,
 	FilePart,
@@ -27,6 +32,7 @@ import type {
 import { getProjectClient } from "../services/connection-manager"
 
 const log = createLogger("use-server")
+const isElectron = typeof window !== "undefined" && "palot" in window
 
 function getCurrentAgentState(sessionId: string): SupervisedAgentState {
 	const entry = appStore.get(sessionFamily(sessionId))
@@ -306,6 +312,22 @@ export function useAgentActions() {
 					permissionID: permissionId,
 					response,
 				})
+				if (response === "always") {
+					const entry = appStore.get(sessionFamily(sessionId))
+					const request = entry?.permissions.find((permission) => permission.id === permissionId)
+					if (entry && request && isElectron) {
+						const settings = await window.palot.getSettings()
+						const profile = getProjectTrustProfile(settings.trust, directory)
+						await window.palot.updateSettings({
+							trust: rememberPermissionApproval({
+								settings: settings.trust,
+								projectPath: directory,
+								profile,
+								request: request as PermissionLike,
+							}),
+						})
+					}
+				}
 			} catch (err) {
 				log.error("respondToPermission failed", { sessionId, permissionId, response }, err)
 				throw err

@@ -178,6 +178,18 @@ export type SkillImportResult = import("../shared/skills").SkillImportResult
 export type { BrainTask, ExecutionPlan, TaskGraph, TaskStatus } from "../shared/tasks"
 
 // ============================================================
+// Trust profile types
+// ============================================================
+
+export type {
+	PermissionAuditEntry,
+	PermissionMemoryEntry,
+	ProjectTrustSettings,
+	TrustProfile,
+	TrustSettings,
+} from "../shared/trust"
+
+// ============================================================
 // mDNS discovery types
 // ============================================================
 
@@ -225,6 +237,8 @@ export interface AppSettings {
 	opaqueWindows: boolean
 	/** Server connection configuration. */
 	servers: ServerSettings
+	/** Agent trust profile, approval memory, and audit log. */
+	trust: import("../shared/trust").TrustSettings
 }
 
 // ============================================================
