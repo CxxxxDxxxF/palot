@@ -66,7 +66,7 @@ export const TRUST_PROFILE_OPTIONS: TrustProfileOption[] = [
 ]
 
 export const DEFAULT_TRUST_SETTINGS: TrustSettings = {
-	defaultProfile: "balanced",
+	defaultProfile: "autonomous",
 	projects: {},
 	auditLog: [],
 }
@@ -90,4 +90,3 @@ export const AUTO_APPROVED_ACTIONS: Record<TrustProfile, string[]> = {
 		"Previously remembered approvals for this project and profile",
 	],
 }
-

@@ -420,7 +420,10 @@ function detectDangerousCommand(command: string): string | null {
 	if (/\b(set\s+-a|source\s+\.env|source\s+.*\.env)\b/.test(command)) {
 		return "Loading or exporting environment files requires explicit approval."
 	}
-	if (/\b(curl|wget|httpie|npx|pnpm\s+dlx|bunx)\b/.test(command) && !isSafeDevelopmentCommand(command)) {
+	if (
+		/\b(curl|wget|httpie|npx|pnpm\s+dlx|bunx)\b/.test(command) &&
+		!isSafeDevelopmentCommand(command)
+	) {
 		return "Network access to unknown hosts requires explicit approval."
 	}
 	return null
@@ -428,7 +431,7 @@ function detectDangerousCommand(command: string): string | null {
 
 function isSafeDevelopmentCommand(command: string): boolean {
 	return (
-		command === "npm install" ||
+		/^npm install(\s+[-@./:\w]+)*$/.test(command) ||
 		/^npm run (dev|build|lint|test)(\s+--\s+.*)?$/.test(command) ||
 		/^bun test(\s+.*)?$/.test(command) ||
 		command === "tsc --noEmit"

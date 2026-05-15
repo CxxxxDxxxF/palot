@@ -27,6 +27,7 @@ describe("trust permission policy", () => {
 	test("auto-approves safe development commands in autonomous mode", () => {
 		for (const command of [
 			"npm install",
+			"npm install eslint-plugin-react @types/node",
 			"npm run dev",
 			"npm run build",
 			"npm run lint",
@@ -128,4 +129,3 @@ describe("trust permission policy", () => {
 		expect(getProjectTrustProfile(undefined, PROJECT, "autonomous")).toBe("autonomous")
 	})
 })
-
