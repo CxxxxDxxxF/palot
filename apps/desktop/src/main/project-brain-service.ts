@@ -54,6 +54,20 @@ export class ProjectBrainService {
 		await fs.writeFile(filePath, content, "utf-8")
 	}
 
+	async appendFile(slug: string, content: string): Promise<void> {
+		const filePath = this.filePathForSlug(slug)
+		if (!filePath) throw new Error(`Invalid brain file slug: ${slug}`)
+		await this.ensureDirectory()
+		const existing = await this.readFile(slug)
+		const separator = existing && !existing.endsWith("\n") ? "\n" : ""
+		await fs.writeFile(filePath, `${existing ?? ""}${separator}${content}`, "utf-8")
+	}
+
+	async recordEvent(slug: string, title: string, body: string): Promise<void> {
+		const timestamp = new Date().toISOString()
+		await this.appendFile(slug, `\n## ${timestamp} — ${title}\n\n${body.trim()}\n`)
+	}
+
 	async deleteFile(slug: string): Promise<boolean> {
 		const filePath = this.filePathForSlug(slug)
 		if (!filePath) return false

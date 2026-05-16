@@ -796,6 +796,14 @@ export function registerIpcHandlers(): void {
 		getBrainService(projectPath).writeFile(slug, content),
 	))
 
+	ipcMain.handle("brain:append", withLogging("brain:append", (_, slug: string, content: string, projectPath?: string) =>
+		getBrainService(projectPath).appendFile(slug, content),
+	))
+
+	ipcMain.handle("brain:record-event", withLogging("brain:record-event", (_, slug: string, title: string, body: string, projectPath?: string) =>
+		getBrainService(projectPath).recordEvent(slug, title, body),
+	))
+
 	ipcMain.handle("brain:delete", withLogging("brain:delete", (_, slug: string, projectPath?: string) =>
 		getBrainService(projectPath).deleteFile(slug),
 	))

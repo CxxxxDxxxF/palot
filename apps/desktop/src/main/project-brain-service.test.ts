@@ -66,6 +66,34 @@ describe("ProjectBrainService", () => {
 		}
 	})
 
+	test("appendFile appends without overwriting existing content", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
+		const service = new ProjectBrainService(dir)
+		try {
+			await service.writeFile("run-history", "# Run History")
+			await service.appendFile("run-history", "- first run")
+			await service.appendFile("run-history", "- second run")
+			const content = await service.readFile("run-history")
+			expect(content).toBe("# Run History\n- first run\n- second run")
+		} finally {
+			await fs.rm(dir, { recursive: true, force: true })
+		}
+	})
+
+	test("recordEvent appends a timestamped event section", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
+		const service = new ProjectBrainService(dir)
+		try {
+			await service.recordEvent("run-history", "agent completed", "summary")
+			const content = await service.readFile("run-history")
+			expect(content).toContain("## ")
+			expect(content).toContain("— agent completed")
+			expect(content).toContain("summary")
+		} finally {
+			await fs.rm(dir, { recursive: true, force: true })
+		}
+	})
+
 	test("readFile and deleteFile reject path traversal slugs", async () => {
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
 		const service = new ProjectBrainService(dir)

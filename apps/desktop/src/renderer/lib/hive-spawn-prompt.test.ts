@@ -27,6 +27,8 @@ describe("buildHiveSpawnPrompt", () => {
 
 		expect(prompt).toContain("Palot Hive Operating Protocol")
 		expect(prompt).toContain("brain_search")
+		expect(prompt).toContain("brain_append")
+		expect(prompt).toContain("brain_record_event")
 		expect(prompt).toContain("brain_write")
 		expect(prompt).toContain("Use tools directly")
 		expect(prompt).toContain("End with a concise report")

@@ -242,7 +242,8 @@ You are part of Palot's Hive Mind and report to the Lead Agent (Boss).
 ### Brain and shared memory
 - Before major decisions, use the shared Brain tools when available: \`brain_search\`, \`brain_list\`, and \`brain_read\`.
 - Useful Brain files include \`README\`, \`tasks\`, \`issues\`, \`decisions\`, \`models\`, \`skills\`, \`run-history\`, and \`agent-performance\`.
-- Use \`brain_write\` to persist durable findings, blockers, decisions, handoff notes, and lessons that other agents should know.
+- Prefer \`brain_append\` or \`brain_record_event\` to persist durable findings, blockers, decisions, handoff notes, and lessons without overwriting other agents.
+- Use \`brain_write\` only when replacing a whole Brain file is intentional.
 - Use \`mem9_recall\` and \`mem9_store\` when semantic memory is configured.
 
 ### Skills
@@ -286,6 +287,17 @@ Use your team's combined expertise — coordinate multiple members in parallel w
 ### Your Team Members
 ${memberList}
 `
+}
+
+function injectHiveOperatingProtocol(body: string): string {
+	const marker = "## Palot Hive Operating Protocol"
+	const protocol = hiveOperatingProtocol().trim()
+	const start = body.indexOf(marker)
+	if (start === -1) return `${body.trimEnd()}\n${hiveOperatingProtocol()}\n`
+
+	const nextSection = body.indexOf("\n## 🏢 Team Leadership", start + marker.length)
+	const end = nextSection === -1 ? body.length : nextSection
+	return `${body.slice(0, start).trimEnd()}\n${protocol}\n${body.slice(end)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -353,11 +365,8 @@ async function main() {
 		fm.team = assignment.team
 		fm["team-role"] = assignment.role
 
-		// Inject Palot hive protocol if not already present
-		let newBody = body
-		if (!newBody.includes("Palot Hive Operating Protocol")) {
-			newBody = `${newBody.trimEnd()}\n${hiveOperatingProtocol()}\n`
-		}
+		// Inject or replace Palot hive protocol.
+		let newBody = injectHiveOperatingProtocol(body)
 
 		// For leaders: inject protocol if not already present
 		if (assignment.role === "leader" && !body.includes("🏢 Team Leadership")) {

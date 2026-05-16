@@ -1,4 +1,5 @@
 import type { ProjectBrainService } from "./project-brain-service"
+import { createLogger } from "./logger"
 import type {
 	AgentPerformanceInput,
 	AgentPerformanceLedger,
@@ -10,6 +11,7 @@ import type {
 
 const SLUG = "agent-performance"
 const MAX_RECORDS = 500
+const log = createLogger("agent-performance")
 
 function emptyLedger(): AgentPerformanceLedger {
 	return {
@@ -177,16 +179,18 @@ function serialize(ledger: AgentPerformanceLedger): string {
 	].join("\n")
 }
 
-function deserialize(content: string | null): AgentPerformanceLedger {
-	if (!content) return emptyLedger()
+function deserialize(content: string | null): { ledger: AgentPerformanceLedger; corrupted: boolean } {
+	if (!content) return { ledger: emptyLedger(), corrupted: false }
 	const match = content.match(/```json\n([\s\S]*?)\n```/)
-	if (!match) return emptyLedger()
+	if (!match) return { ledger: emptyLedger(), corrupted: true }
 	try {
 		const parsed = JSON.parse(match[1]) as AgentPerformanceLedger
-		if (parsed.version !== 1 || !Array.isArray(parsed.records)) return emptyLedger()
-		return rebuild(parsed.records)
+		if (parsed.version !== 1 || !Array.isArray(parsed.records)) {
+			return { ledger: emptyLedger(), corrupted: true }
+		}
+		return { ledger: rebuild(parsed.records), corrupted: false }
 	} catch {
-		return emptyLedger()
+		return { ledger: emptyLedger(), corrupted: true }
 	}
 }
 
@@ -194,7 +198,14 @@ export class AgentPerformanceService {
 	constructor(private readonly brainService: ProjectBrainService) {}
 
 	async load(): Promise<AgentPerformanceLedger> {
-		return deserialize(await this.brainService.readFile(SLUG))
+		const content = await this.brainService.readFile(SLUG)
+		const parsed = deserialize(content)
+		if (content && parsed.corrupted) {
+			const backupSlug = `agent-performance-corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`
+			await this.brainService.writeFile(backupSlug, content)
+			log.warn("Agent performance ledger was corrupted; preserved recovery copy", { backupSlug })
+		}
+		return parsed.ledger
 	}
 
 	async record(input: AgentPerformanceInput): Promise<AgentPerformanceLedger> {

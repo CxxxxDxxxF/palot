@@ -30,9 +30,16 @@ export function useMem9MemoryStorage(
 
 	// Check if Mem9 is configured on first mount
 	useEffect(() => {
-		mem9Status().then((s) => {
-			configuredRef.current = s.configured
-		})
+		mem9Status()
+			.then((s) => {
+				configuredRef.current = s.configured
+			})
+			.catch((err) => {
+				configuredRef.current = false
+				log.warn("Failed to check Mem9 status", {
+					error: err instanceof Error ? err.message : String(err),
+				})
+			})
 	}, [])
 
 	useEffect(() => {
@@ -42,11 +49,11 @@ export function useMem9MemoryStorage(
 			const prev = prevStatusRef.current.get(child.sessionId)
 			const curr = child.agentStatus
 
-			if (
-				prev === "running" &&
-				(curr === "completed" || curr === "idle") &&
-				!recordedRef.current.has(child.sessionId)
-			) {
+				if (
+					prev === "running" &&
+					(curr === "completed" || curr === "idle" || curr === "failed") &&
+					!recordedRef.current.has(child.sessionId)
+				) {
 				recordedRef.current.add(child.sessionId)
 
 				// Extract assistant response text
@@ -64,22 +71,28 @@ export function useMem9MemoryStorage(
 				}
 
 				// Store asynchronously — fire and forget
-				mem9Store({
-					content,
-					source: `session:${child.sessionId}`,
-					tags: ["agent-output", child.name.toLowerCase().replace(/\s+/g, "-")],
+					mem9Store({
+						content,
+						source: `session:${child.sessionId}`,
+						tags: ["agent-output", child.name.toLowerCase().replace(/\s+/g, "-")],
 					metadata: {
 						agentName: child.name,
 						sessionId: child.sessionId,
 						parentSessionId,
-						status: curr,
-					},
-				}).then((result) => {
-					if (result) {
-						log.info("Stored agent output as memory", { id: result.id, agent: child.name })
-					}
-				})
-			}
+							status: curr,
+						},
+					}).then((result) => {
+						if (result) {
+							log.info("Stored agent output as memory", { id: result.id, agent: child.name })
+						}
+					}).catch((err) => {
+						log.warn("Failed to store agent output as Mem9 memory", {
+							agent: child.name,
+							sessionId: child.sessionId,
+							error: err instanceof Error ? err.message : String(err),
+						})
+					})
+				}
 
 			prevStatusRef.current.set(child.sessionId, curr)
 		}

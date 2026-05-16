@@ -319,6 +319,8 @@ contextBridge.exposeInMainWorld("palot", {
 		list: (projectPath?: string) => ipcRenderer.invoke("brain:list", projectPath),
 		read: (slug: string, projectPath?: string) => ipcRenderer.invoke("brain:read", slug, projectPath),
 		write: (slug: string, content: string, projectPath?: string) => ipcRenderer.invoke("brain:write", slug, content, projectPath),
+		append: (slug: string, content: string, projectPath?: string) => ipcRenderer.invoke("brain:append", slug, content, projectPath),
+		recordEvent: (slug: string, title: string, body: string, projectPath?: string) => ipcRenderer.invoke("brain:record-event", slug, title, body, projectPath),
 		delete: (slug: string, projectPath?: string) => ipcRenderer.invoke("brain:delete", slug, projectPath),
 		search: (keyword: string, projectPath?: string) => ipcRenderer.invoke("brain:search", keyword, projectPath),
 		summary: () => ipcRenderer.invoke("skills:brain-summary"),

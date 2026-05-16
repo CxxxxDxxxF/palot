@@ -581,6 +581,21 @@ export async function writeBrainFile(slug: string, content: string, projectPath?
 	throw new Error("Brain is only available in Electron mode")
 }
 
+export async function appendBrainFile(slug: string, content: string, projectPath?: string): Promise<void> {
+	if (isElectron) return window.palot.brain.append(slug, content, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
+export async function recordBrainEvent(
+	slug: string,
+	title: string,
+	body: string,
+	projectPath?: string,
+): Promise<void> {
+	if (isElectron) return window.palot.brain.recordEvent(slug, title, body, projectPath)
+	throw new Error("Brain is only available in Electron mode")
+}
+
 export async function deleteBrainFile(slug: string, projectPath?: string): Promise<boolean> {
 	if (isElectron) return window.palot.brain.delete(slug, projectPath)
 	throw new Error("Brain is only available in Electron mode")

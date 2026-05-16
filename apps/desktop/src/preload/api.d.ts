@@ -603,6 +603,8 @@ export interface PalotAPI {
 		list: (projectPath?: string) => Promise<string[]>
 		read: (slug: string, projectPath?: string) => Promise<string | null>
 		write: (slug: string, content: string, projectPath?: string) => Promise<void>
+		append: (slug: string, content: string, projectPath?: string) => Promise<void>
+		recordEvent: (slug: string, title: string, body: string, projectPath?: string) => Promise<void>
 		delete: (slug: string, projectPath?: string) => Promise<boolean>
 		search: (keyword: string, projectPath?: string) => Promise<import("../main/project-brain-service").BrainSearchResult[]>
 		summary: () => Promise<string>

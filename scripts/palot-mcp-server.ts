@@ -64,6 +64,39 @@ const TOOLS = [
 		},
 	},
 	{
+		name: "brain_append",
+		description:
+			"Append content to a shared brain memory file without overwriting existing content. Prefer this for run-history, handoffs, findings, and multi-agent notes.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				slug: {
+					type: "string",
+					description: "File slug without .md (e.g. 'run-history', 'decisions')",
+				},
+				content: { type: "string", description: "Markdown content to append" },
+			},
+			required: ["slug", "content"],
+		},
+	},
+	{
+		name: "brain_record_event",
+		description:
+			"Append a timestamped event section to a shared brain file. Use for durable run history, decisions, blockers, and handoff events.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				slug: {
+					type: "string",
+					description: "File slug without .md (e.g. 'run-history', 'decisions')",
+				},
+				title: { type: "string", description: "Short event title" },
+				body: { type: "string", description: "Markdown event body" },
+			},
+			required: ["slug", "title", "body"],
+		},
+	},
+	{
 		name: "brain_search",
 		description:
 			"Keyword search across all shared brain files. Returns matching slugs with excerpts.",
@@ -145,6 +178,23 @@ async function brainWrite(slug: string, content: string): Promise<void> {
 	await fs.writeFile(safeBrainPath(slug), content, "utf-8")
 }
 
+async function brainAppend(slug: string, content: string): Promise<void> {
+	await fs.mkdir(BRAIN_DIR, { recursive: true })
+	let existing = ""
+	try {
+		existing = await fs.readFile(safeBrainPath(slug), "utf-8")
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+	}
+	const separator = existing && !existing.endsWith("\n") ? "\n" : ""
+	await fs.writeFile(safeBrainPath(slug), `${existing}${separator}${content}`, "utf-8")
+}
+
+async function brainRecordEvent(slug: string, title: string, body: string): Promise<void> {
+	const timestamp = new Date().toISOString()
+	await brainAppend(slug, `\n## ${timestamp} — ${title}\n\n${body.trim()}\n`)
+}
+
 async function brainSearch(keyword: string): Promise<Array<{ slug: string; excerpt: string }>> {
 	const slugs = await brainList()
 	const needle = keyword.toLowerCase()
@@ -218,6 +268,14 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<Te
 		case "brain_write": {
 			await brainWrite(args.slug as string, args.content as string)
 			return [{ type: "text", text: `Written: ${args.slug}.md` }]
+		}
+		case "brain_append": {
+			await brainAppend(args.slug as string, args.content as string)
+			return [{ type: "text", text: `Appended: ${args.slug}.md` }]
+		}
+		case "brain_record_event": {
+			await brainRecordEvent(args.slug as string, args.title as string, args.body as string)
+			return [{ type: "text", text: `Recorded event in: ${args.slug}.md` }]
 		}
 		case "brain_search": {
 			const results = await brainSearch(args.keyword as string)
