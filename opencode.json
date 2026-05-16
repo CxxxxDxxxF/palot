@@ -6,7 +6,7 @@
 	"default_agent": "lead-agent",
 	"agent": {
 		"lead-agent": {
-			"model": "openrouter/deepseek/deepseek-chat-v3.1",
+			"model": "openrouter/deepseek/deepseek-r1",
 			"mode": "primary"
 		},
 		"architect": {

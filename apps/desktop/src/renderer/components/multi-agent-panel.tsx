@@ -12,8 +12,10 @@ import {
 	CheckCircle2Icon,
 	CircleDotIcon,
 	Loader2Icon,
+	PlusIcon,
 	TimerIcon,
 	UserIcon,
+	XIcon,
 	ZapIcon,
 } from "lucide-react"
 import type React from "react"
@@ -153,6 +155,8 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const { abort, sendPrompt, createSession } = useAgentActions()
 	const recoveryConfig = useAtomValue(recoveryConfigFamily(parentSessionId))
 	const setRecoveryConfig = useSetAtom(recoveryConfigFamily(parentSessionId))
+
+	const [rosterOpen, setRosterOpen] = useState(false)
 
 	// Load agent metadata for team-aware pipeline display and performance records
 	const [knownAgents, setKnownAgents] = useState<ManagedAgent[]>([])
@@ -378,6 +382,23 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				/>
 				Hive Mind
 				<ZapIcon className="size-3 text-muted-foreground/40" aria-hidden="true" />
+				{!isIdle && (
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<button
+									type="button"
+									onClick={() => setRosterOpen((v) => !v)}
+									className="ml-auto flex size-4 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-muted/40 hover:text-muted-foreground"
+									aria-label={rosterOpen ? "Close agent roster" : "Add agent"}
+								>
+									{rosterOpen ? <XIcon className="size-3" /> : <PlusIcon className="size-3" />}
+								</button>
+							}
+						/>
+						<TooltipContent side="right">{rosterOpen ? "Close roster" : "Add agent"}</TooltipContent>
+					</Tooltip>
+				)}
 			</SidebarGroupLabel>
 			<SidebarGroupContent>
 				<div className="space-y-1 px-2 pb-1">
@@ -563,21 +584,22 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 					</div>
 				</>
 			)}
-					{/* Team roster — always accessible, both idle and active */}
-					{!isIdle && (
-						<details className="group rounded-md border border-border/30 bg-muted/10 px-2.5 py-2">
-							<summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors list-none flex items-center gap-1.5">
+					{/* Team roster — shown when + button pressed during active sessions */}
+					{!isIdle && rosterOpen && (
+						<div className="rounded-md border border-border/30 bg-muted/10 px-2.5 py-2">
+							<p className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
 								<UserIcon className="size-3" aria-hidden="true" />
-								Spawn More Agents
-							</summary>
-							<div className="pt-2">
-								<TeamRoster
-									directory={parentEntry?.directory ?? ""}
-									sessionId={parentSessionId}
-									onSpawn={handleSpawn}
-								/>
-							</div>
-						</details>
+								Add Agent
+							</p>
+							<TeamRoster
+								directory={parentEntry?.directory ?? ""}
+								sessionId={parentSessionId}
+								onSpawn={async (...args) => {
+									await handleSpawn(...args)
+									setRosterOpen(false)
+								}}
+							/>
+						</div>
 					)}
 				</div>
 			</SidebarGroupContent>

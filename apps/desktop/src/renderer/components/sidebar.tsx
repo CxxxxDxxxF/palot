@@ -19,6 +19,7 @@ import {
 	BrainIcon,
 	CommandIcon,
 	GraduationCapIcon,
+	LayoutDashboardIcon,
 	PlusIcon,
 	SearchIcon,
 	SettingsIcon,
@@ -367,6 +368,16 @@ export function AppSidebarContent({
 				<ServerIndicator />
 				<SidebarMenu>
 					<CostTracker />
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							tooltip="Agent Library"
+							onClick={() => navigate({ to: "/agents" })}
+							className="text-muted-foreground"
+						>
+							<LayoutDashboardIcon className="size-4" />
+							<span>Agents</span>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
 					<SidebarMenuItem>
 						<SidebarMenuButton
 							tooltip="Skills"
