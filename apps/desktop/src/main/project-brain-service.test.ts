@@ -66,6 +66,30 @@ describe("ProjectBrainService", () => {
 		}
 	})
 
+	test("readFile and deleteFile reject path traversal slugs", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
+		const service = new ProjectBrainService(dir)
+		try {
+			await fs.writeFile(path.join(dir, "safe.md"), "safe", "utf-8")
+			expect(await service.readFile("../safe")).toBeNull()
+			expect(await service.deleteFile("../safe")).toBe(false)
+			expect(await service.readFile("safe")).toBe("safe")
+		} finally {
+			await fs.rm(dir, { recursive: true, force: true })
+		}
+	})
+
+	test("writeFile rejects path traversal slugs", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
+		const service = new ProjectBrainService(dir)
+		try {
+			await expect(service.writeFile("../outside", "nope")).rejects.toThrow("Invalid brain file slug")
+			await expect(fs.readFile(path.join(dir, "..", "outside.md"), "utf-8")).rejects.toThrow()
+		} finally {
+			await fs.rm(dir, { recursive: true, force: true })
+		}
+	})
+
 	test("buildSummary returns string at most 2000 chars", async () => {
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "palot-brain-"))
 		const service = new ProjectBrainService(dir)

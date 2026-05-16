@@ -18,6 +18,16 @@ export class ProjectBrainService {
 		await fs.mkdir(this.brainDir, { recursive: true })
 	}
 
+	private filePathForSlug(slug: string): string | null {
+		const normalized = slug.trim().replace(/\.md$/i, "")
+		if (!/^[A-Za-z0-9_-]+$/.test(normalized)) return null
+
+		const root = path.resolve(this.brainDir)
+		const filePath = path.resolve(root, `${normalized}.md`)
+		if (filePath !== root && !filePath.startsWith(`${root}${path.sep}`)) return null
+		return filePath
+	}
+
 	async listFiles(): Promise<string[]> {
 		await this.ensureDirectory()
 		const entries = await fs.readdir(this.brainDir)
@@ -28,7 +38,8 @@ export class ProjectBrainService {
 	}
 
 	async readFile(slug: string): Promise<string | null> {
-		const filePath = path.join(this.brainDir, `${slug}.md`)
+		const filePath = this.filePathForSlug(slug)
+		if (!filePath) return null
 		try {
 			return await fs.readFile(filePath, "utf-8")
 		} catch {
@@ -37,12 +48,15 @@ export class ProjectBrainService {
 	}
 
 	async writeFile(slug: string, content: string): Promise<void> {
+		const filePath = this.filePathForSlug(slug)
+		if (!filePath) throw new Error(`Invalid brain file slug: ${slug}`)
 		await this.ensureDirectory()
-		await fs.writeFile(path.join(this.brainDir, `${slug}.md`), content, "utf-8")
+		await fs.writeFile(filePath, content, "utf-8")
 	}
 
 	async deleteFile(slug: string): Promise<boolean> {
-		const filePath = path.join(this.brainDir, `${slug}.md`)
+		const filePath = this.filePathForSlug(slug)
+		if (!filePath) return false
 		try {
 			await fs.unlink(filePath)
 			return true

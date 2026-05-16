@@ -49,15 +49,21 @@ export function BrainPage() {
 	const [contentLoading, setContentLoading] = useState(false)
 	const [searchQuery, setSearchQuery] = useState("")
 	const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null)
+	const [error, setError] = useState<string | null>(null)
 
 	useEffect(() => {
 		let cancelled = false
 		setLoading(true)
+		setError(null)
 		listBrainFiles()
 			.then((slugs) => {
 				if (!cancelled) setFiles(slugs.map((s) => ({ slug: s, title: deriveTitle(s) })))
 			})
-			.catch(() => { if (!cancelled) setFiles([]) })
+			.catch((err) => {
+				if (cancelled) return
+				setFiles([])
+				setError(err instanceof Error ? err.message : "Failed to load brain files.")
+			})
 			.finally(() => { if (!cancelled) setLoading(false) })
 		return () => { cancelled = true }
 	}, [])
@@ -70,11 +76,13 @@ export function BrainPage() {
 		}
 		setSelected(slug)
 		setContentLoading(true)
+		setError(null)
 		try {
 			const text = await readBrainFile(slug)
 			setContent(text)
-		} catch {
+		} catch (err) {
 			setContent("(failed to load)")
+			setError(err instanceof Error ? err.message : `Failed to load ${slug}.`)
 		} finally {
 			setContentLoading(false)
 		}
@@ -88,8 +96,10 @@ export function BrainPage() {
 		try {
 			const results = await searchBrainFiles(searchQuery)
 			setSearchResults(results)
-		} catch {
+			setError(null)
+		} catch (err) {
 			setSearchResults([])
+			setError(err instanceof Error ? err.message : "Failed to search brain files.")
 		}
 	}, [searchQuery])
 
@@ -163,7 +173,11 @@ export function BrainPage() {
 
 			{/* List + detail */}
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				{loading ? (
+				{error ? (
+					<div className="mx-5 mt-4 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
+						{error}
+					</div>
+				) : loading ? (
 					<div className="flex items-center justify-center py-10">
 						<Loader2Icon className="size-4 animate-spin text-muted-foreground/50" />
 					</div>
