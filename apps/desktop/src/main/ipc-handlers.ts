@@ -1,6 +1,11 @@
 import fs from "node:fs"
 import fsAsync from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+// ESM equivalent for __dirname (electron-vite serves main process as ESM in dev)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, shell, systemPreferences } from "electron"
 import {
 	acceptRun,
