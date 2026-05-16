@@ -16,6 +16,7 @@ import { AlertCircleIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, Crown
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { ManagedAgent } from "../../shared/agents"
 import type { KnowledgeSource } from "../../shared/knowledge"
+import { scoreKnowledgeSources } from "../../shared/knowledge-scorer"
 import { listAgents, listKnowledgeSources } from "../services/backend"
 
 // ============================================================
@@ -80,11 +81,19 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 		setCustomInstruction(""); setSpawning(false); setError(null); setSelectedKnowledge([])
 		listKnowledgeSources(directory)
 			.then((sources) => {
-				const agentSlug = agent.name.toLowerCase()
-				setKnowledgeSources(sources.filter((s) => !s.agents || s.agents === "" || s.agents.split(",").some((a) => agentSlug.includes(a.trim()))))
+				const scored = scoreKnowledgeSources(sources, {
+					agentName: agent.name,
+					agentDescription: agent.description,
+					agentTeam: agent.team,
+					agentMode: agent.mode,
+				})
+				setKnowledgeSources(scored.map((s) => s.source))
+				// Pre-select highly relevant sources (score ≥ 3)
+				const high = scored.filter((s) => s.score >= 3).map((s) => s.source.filename)
+				if (high.length > 0) setSelectedKnowledge(high)
 			})
 			.catch(() => setKnowledgeSources([]))
-	}, [open, agent.name, directory])
+	}, [open, agent.name, agent.description, agent.team, agent.mode, directory])
 
 	const toggleKnowledge = useCallback((filename: string) => {
 		setSelectedKnowledge((prev) => prev.includes(filename) ? prev.filter((f) => f !== filename) : [...prev, filename])
@@ -101,6 +110,22 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 	}, [agent.name, customInstruction, selectedKnowledge, onSpawn, onClose])
 
 	const modelRef = useMemo(() => (agent.model ? parseModelString(agent.model) : null), [agent.model])
+
+	// Derive scores for badge display (sorted matches the state order)
+	const scoredSources = useMemo(
+		() => scoreKnowledgeSources(knowledgeSources, {
+			agentName: agent.name,
+			agentDescription: agent.description,
+			agentTeam: agent.team,
+			agentMode: agent.mode,
+		}),
+		[knowledgeSources, agent.name, agent.description, agent.team, agent.mode],
+	)
+	const scoreByFilename = useMemo(() => {
+		const map = new Map<string, number>()
+		for (const s of scoredSources) map.set(s.source.filename, s.score)
+		return map
+	}, [scoredSources])
 
 	return (
 		<Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
@@ -163,16 +188,21 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 							<div className="space-y-1">
 								{knowledgeSources.map((ks) => {
 									const isSelected = selectedKnowledge.includes(ks.filename)
+									const score = scoreByFilename.get(ks.filename) ?? 0
 									return (
 										<label key={ks.filename} className={cn("flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 transition-colors", isSelected ? "border-sky-400/30 bg-sky-400/10" : "border-border/20 hover:border-border/40")}>
 											<input type="checkbox" checked={isSelected} onChange={() => toggleKnowledge(ks.filename)} className="mt-0.5 size-3 rounded border-border accent-sky-500" disabled={spawning} />
 											<div className="min-w-0 flex-1">
-												<p className="text-xs font-medium text-foreground/85">{ks.title}</p>
+												<p className="flex items-center gap-1.5 text-xs font-medium text-foreground/85">
+													{ks.title}
+													{score >= 1 && (
+														<span className={cn("rounded px-1 py-[1px] text-[9px] font-normal", score >= 3 ? "bg-sky-400/15 text-sky-400" : "bg-muted/30 text-muted-foreground/50")}>{score}</span>
+													)}
+												</p>
 												{ks.description && <p className="mt-0.5 truncate text-[10px] text-muted-foreground/60">{ks.description}</p>}
 												<p className="mt-0.5 text-[9px] text-muted-foreground/40">{ks.source}</p>
 											</div>
-										</label>
-									)
+										</label>)
 								})}
 							</div>
 						</div>

@@ -26,16 +26,6 @@
 			"mode": "subagent"
 		}
 	},
-	"mcp": {
-		"palot-brain": {
-			"type": "local",
-			"command": ["bun", "scripts/palot-mcp-server.ts"],
-			"environment": {
-				"PALOT_BRAIN_DIR": ".palot/brain"
-			},
-			"timeout": 10000
-		}
-	},
 	"permission": {
 		"*": "ask",
 		"bash": {

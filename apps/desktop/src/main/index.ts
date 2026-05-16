@@ -4,6 +4,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, BrowserWindow, Menu, session, shell } from "electron"
 import { initAutomations, shutdownAutomations } from "./automation"
+import { registerBrainMcpServer, unregisterBrainMcpServer } from "./brain-mcp-registrar"
 import { initCredentialStore } from "./credential-store"
 import { getOpaqueWindowsPref, registerIpcHandlers } from "./ipc-handlers"
 import { installLiquidGlass, resolveWindowChrome } from "./liquid-glass"
@@ -287,6 +288,7 @@ if (!gotLock) {
 		initSettingsStore()
 		initCredentialStore()
 		registerIpcHandlers()
+		registerBrainMcpServer()
 		initAutomations().catch(console.error)
 		startMdnsScanner().catch((err) => log.warn("mDNS scanner failed to start", err))
 		createWindow()
@@ -314,5 +316,6 @@ if (!gotLock) {
 		stopMdnsScanner()
 		stopServer()
 		stopAutoUpdater()
+		unregisterBrainMcpServer()
 	})
 }
