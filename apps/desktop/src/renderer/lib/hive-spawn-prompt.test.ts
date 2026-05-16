@@ -50,6 +50,45 @@ describe("buildHiveSpawnPrompt", () => {
 		expect(prompt).toContain("If a project skill applies")
 	})
 
+	test("truncates memories beyond 3 000 chars", () => {
+		const bigMemories = "x".repeat(5_000)
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "researcher",
+			agentDescription: "",
+			customInstruction: "Do research.",
+			memories: bigMemories,
+		})
+		expect(prompt).toContain("truncated to 3000 chars")
+		expect(prompt.includes(bigMemories)).toBe(false)
+	})
+
+	test("truncates a knowledge section beyond 12 000 chars", () => {
+		const bigDoc = "A".repeat(20_000)
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "engineer",
+			agentDescription: "",
+			customInstruction: "Build it.",
+			knowledgeSections: [{ title: "API Reference", prompt: bigDoc }],
+		})
+		expect(prompt).toContain("Knowledge section truncated")
+		expect(prompt.includes(bigDoc)).toBe(false)
+	})
+
+	test("omits later knowledge sections when total budget exhausted", () => {
+		const section = "B".repeat(13_000)
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "engineer",
+			agentDescription: "",
+			customInstruction: "Build it.",
+			knowledgeSections: [
+				{ title: "First", prompt: section },
+				{ title: "Second", prompt: section },
+				{ title: "Third", prompt: section },
+			],
+		})
+		expect(prompt).toContain("knowledge budget exhausted")
+	})
+
 	test("surfaces non-blocking context warnings", () => {
 		const prompt = buildHiveSpawnPrompt({
 			agentName: "debugger",

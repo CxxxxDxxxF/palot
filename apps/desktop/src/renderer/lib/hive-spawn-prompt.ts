@@ -19,8 +19,19 @@ export interface HiveSpawnPromptInput {
 	warnings?: string[]
 }
 
+// Prompt section size budget (chars). Keeps spawn prompts inside a sensible
+// token envelope even when attached knowledge sources are large documents.
+const MAX_MEMORIES_CHARS = 3_000
+const MAX_KNOWLEDGE_SECTION_CHARS = 12_000
+const MAX_KNOWLEDGE_TOTAL_CHARS = 24_000
+
 function normalize(text: string): string {
 	return text.trim()
+}
+
+function clamp(text: string, max: number, label: string): { text: string; truncated: boolean } {
+	if (text.length <= max) return { text, truncated: false }
+	return { text: `${text.slice(0, max)}\n… [${label} truncated to ${max} chars]`, truncated: true }
 }
 
 function findRelevantSkills(agentName: string, task: string, skills: ManagedSkill[]): ManagedSkill[] {
@@ -105,7 +116,11 @@ export function buildHiveSpawnPrompt(input: HiveSpawnPromptInput): string {
 	}
 
 	if (input.memories) {
-		parts.push("", input.memories)
+		const { text: mem, truncated: memTruncated } = clamp(input.memories, MAX_MEMORIES_CHARS, "memories")
+		parts.push("", mem)
+		if (memTruncated) {
+			parts.push("", "> Memory recall truncated to fit prompt budget.")
+		}
 	}
 
 	if (input.warnings && input.warnings.length > 0) {
@@ -123,8 +138,19 @@ export function buildHiveSpawnPrompt(input: HiveSpawnPromptInput): string {
 
 	if (input.knowledgeSections && input.knowledgeSections.length > 0) {
 		parts.push("", "## Reference Knowledge", "")
+		let knowledgeBudget = MAX_KNOWLEDGE_TOTAL_CHARS
 		for (const section of input.knowledgeSections) {
-			parts.push(`### ${section.title}`, "", section.prompt, "")
+			if (knowledgeBudget <= 0) {
+				parts.push(`### ${section.title}`, "", "> [omitted — total knowledge budget exhausted]", "")
+				continue
+			}
+			const sectionBudget = Math.min(MAX_KNOWLEDGE_SECTION_CHARS, knowledgeBudget)
+			const { text: body, truncated } = clamp(section.prompt, sectionBudget, section.title)
+			parts.push(`### ${section.title}`, "", body, "")
+			knowledgeBudget -= body.length
+			if (truncated) {
+				parts.push("> Knowledge section truncated to fit prompt budget.", "")
+			}
 		}
 	}
 
