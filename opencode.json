@@ -25,5 +25,45 @@
 			"model": "openrouter/google/gemini-2.5-flash-preview-09-2025",
 			"mode": "subagent"
 		}
+	},
+	"mcp": {
+		"palot-brain": {
+			"type": "local",
+			"command": ["bun", "scripts/palot-mcp-server.ts"],
+			"environment": {
+				"PALOT_BRAIN_DIR": ".palot/brain"
+			},
+			"timeout": 10000
+		}
+	},
+	"permission": {
+		"*": "ask",
+		"bash": {
+			"gh repo *": "allow",
+			"pkill -f \"opencode\"": "allow",
+			"opencode --help": "allow",
+			"opencode run *": "allow",
+			"opencode models *": "allow",
+			"git -C ~/palot status": "allow",
+			"git -C ~/palot diff --stat": "allow",
+			"git *": "allow",
+			"gh pr create --title 'feat: overhaul agent pipeline with architect, corrected models, and golf pace utility' --body ' *": "allow",
+			"npm run *": "allow",
+			"pkill -f \"electron\\\\|vite\\\\|palot.*dev\"": "allow",
+			"xargs kill *": "allow",
+			"pkill -f \"Electron\\\\|electron\"": "allow",
+			"grep -rn 'projectSlug\\\\|project/$projectSlug\\\\|/project/' /Users/cristianruizjr/palot/apps/desktop/src/renderer/ '--include=*.ts' '--include=*.tsx'": "allow",
+			"npx biome *": "allow",
+			"npx tsc *": "allow",
+			"bun test *": "allow",
+			"xargs cat *": "allow",
+			"xargs ls -la": "allow"
+		},
+		"read": {
+			"//Users/cristianruizjr/.claude/skills/**": "allow"
+		},
+		"skill": {
+			"oh-my-claudecode:autopilot": "allow"
+		}
 	}
 }

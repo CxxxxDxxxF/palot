@@ -444,6 +444,121 @@ export async function fetchAutomationRuns(automationId?: string): Promise<Automa
 }
 
 // ============================================================
+// Agents — Electron-only (reads/writes .opencode/agents/ per project)
+// ============================================================
+
+export async function listAgents(projectPath?: string): Promise<import("../../shared/agents").ManagedAgent[]> {
+	if (isElectron) {
+		return window.palot.agents.list(projectPath)
+	}
+	throw new Error("Agents are only available in Electron mode")
+}
+
+export async function getAgent(filename: string, projectPath?: string): Promise<import("../../shared/agents").ManagedAgent | null> {
+	if (isElectron) {
+		return window.palot.agents.get(filename, projectPath)
+	}
+	throw new Error("Agents are only available in Electron mode")
+}
+
+export async function writeAgent(filename: string, raw: string, projectPath?: string): Promise<string> {
+	if (isElectron) {
+		return window.palot.agents.write(filename, raw, projectPath)
+	}
+	throw new Error("Agents are only available in Electron mode")
+}
+
+export async function deleteAgent(filename: string, projectPath?: string): Promise<boolean> {
+	if (isElectron) {
+		return window.palot.agents.delete(filename, projectPath)
+	}
+	throw new Error("Agents are only available in Electron mode")
+}
+
+// ============================================================
+// Knowledge Sources — Electron-only (reads .agents/knowledge/)
+// ============================================================
+
+export async function listKnowledgeSources(projectPath?: string): Promise<import("../../shared/knowledge").KnowledgeSource[]> {
+	if (isElectron) {
+		return window.palot.sourceKnowledge.list(projectPath)
+	}
+	return []
+}
+
+export async function getKnowledgeSource(filename: string, projectPath?: string): Promise<import("../../shared/knowledge").KnowledgeSource | null> {
+	if (isElectron) {
+		return window.palot.sourceKnowledge.get(filename, projectPath)
+	}
+	return null
+}
+
+// ============================================================
+// Mem9 (persistent memory) — Electron-only
+// ============================================================
+
+export async function mem9Init(config?: { apiKey?: string; baseUrl?: string; agentId?: string }): Promise<boolean> {
+	if (isElectron) return window.palot.mem9.init(config)
+	return false
+}
+
+export async function mem9Status(): Promise<{ initialized: boolean; configured: boolean }> {
+	if (isElectron) return window.palot.mem9.status()
+	return { initialized: false, configured: false }
+}
+
+export async function mem9Store(input: {
+	content: string
+	source?: string
+	tags?: string[]
+	metadata?: Record<string, unknown>
+}): Promise<import("../../main/mem9-service").Mem9Memory | null> {
+	if (isElectron) return window.palot.mem9.store(input)
+	return null
+}
+
+export async function mem9Search(params: {
+	q?: string
+	tags?: string
+	source?: string
+	limit?: number
+	offset?: number
+}): Promise<import("../../main/mem9-service").Mem9SearchResult> {
+	if (isElectron) return window.palot.mem9.search(params)
+	return { memories: [], total: 0, limit: params.limit ?? 10, offset: params.offset ?? 0 }
+}
+
+export async function mem9Get(id: string): Promise<import("../../main/mem9-service").Mem9Memory | null> {
+	if (isElectron) return window.palot.mem9.get(id)
+	return null
+}
+
+export async function mem9Delete(id: string): Promise<boolean> {
+	if (isElectron) return window.palot.mem9.delete(id)
+	return false
+}
+
+export async function mem9Recall(query: string, limit?: number): Promise<string | null> {
+	if (isElectron) return window.palot.mem9.recall(query, limit)
+	return null
+}
+
+export async function mem9EmbedKnowledge(projectPath: string): Promise<number> {
+	if (isElectron) return window.palot.mem9.embedKnowledge(projectPath)
+	return 0
+}
+
+export async function mem9EmbedBrain(projectPath: string): Promise<number> {
+	if (isElectron) return window.palot.mem9.embedBrain(projectPath)
+	return 0
+}
+
+export async function mem9EmbedAll(projectPath: string): Promise<number> {
+	if (isElectron) return window.palot.mem9.embedAll(projectPath)
+	return 0
+}
+
+// ============================================================
 // Skills — Electron-only (reads/writes ~/.config/opencode/skills/)
 // ============================================================
 

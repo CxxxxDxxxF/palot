@@ -267,6 +267,23 @@ contextBridge.exposeInMainWorld("palot", {
 		}
 	},
 
+	// --- Agents ---
+
+	agents: {
+		list: (projectPath?: string) => ipcRenderer.invoke("agents:list", projectPath),
+		get: (filename: string, projectPath?: string) => ipcRenderer.invoke("agents:get", filename, projectPath),
+		write: (filename: string, raw: string, projectPath?: string) =>
+			ipcRenderer.invoke("agents:write", filename, raw, projectPath),
+		delete: (filename: string, projectPath?: string) => ipcRenderer.invoke("agents:delete", filename, projectPath),
+	},
+
+	// --- Knowledge Sources (agent reference docs) ---
+
+	sourceKnowledge: {
+		list: (projectPath?: string) => ipcRenderer.invoke("knowledge-src:list", projectPath),
+		get: (filename: string, projectPath?: string) => ipcRenderer.invoke("knowledge-src:get", filename, projectPath),
+	},
+
 	// --- Skills ---
 
 	skills: {
@@ -276,6 +293,24 @@ contextBridge.exposeInMainWorld("palot", {
 		write: (filename: string, raw: string) => ipcRenderer.invoke("skills:write", filename, raw),
 		delete: (filename: string) => ipcRenderer.invoke("skills:delete", filename),
 		brainSummary: () => ipcRenderer.invoke("skills:brain-summary"),
+	},
+
+	// --- Mem9 (persistent memory) ---
+
+	mem9: {
+		init: (config?: { apiKey?: string; baseUrl?: string; agentId?: string }) =>
+			ipcRenderer.invoke("mem9:init", config),
+		status: () => ipcRenderer.invoke("mem9:status"),
+		store: (input: { content: string; source?: string; tags?: string[]; metadata?: Record<string, unknown> }) =>
+			ipcRenderer.invoke("mem9:store", input),
+		search: (params: { q?: string; tags?: string; source?: string; limit?: number; offset?: number }) =>
+			ipcRenderer.invoke("mem9:search", params),
+		get: (id: string) => ipcRenderer.invoke("mem9:get", id),
+		delete: (id: string) => ipcRenderer.invoke("mem9:delete", id),
+		recall: (query: string, limit?: number) => ipcRenderer.invoke("mem9:recall", query, limit),
+		embedKnowledge: (projectPath: string) => ipcRenderer.invoke("mem9:embed-knowledge", projectPath),
+		embedBrain: (projectPath: string) => ipcRenderer.invoke("mem9:embed-brain", projectPath),
+		embedAll: (projectPath: string) => ipcRenderer.invoke("mem9:embed-all", projectPath),
 	},
 
 	// --- Brain ---

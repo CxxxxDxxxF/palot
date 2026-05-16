@@ -1,3 +1,5 @@
+import fs from "node:fs"
+import fsAsync from "node:fs/promises"
 import path from "node:path"
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, shell, systemPreferences } from "electron"
 import {
@@ -59,6 +61,9 @@ import { SemanticIndexService } from "./semantic-index-service"
 import { SupervisorStateService } from "./supervisor-state-service"
 import type { SubagentOutput } from "./supervisor-state-service"
 import { getOpaqueWindows, getSettings, onSettingsChanged, updateSettings } from "./settings-store"
+import { AgentService, parseAgentDocument } from "./agent-service"
+import { KnowledgeService } from "./knowledge-service"
+import { mem9Service } from "./mem9-service"
 import { SkillsService } from "./skills-service"
 import { SkillImporter } from "./skill-importer"
 import type { BrainTask, TaskStatus } from "../shared/tasks"
@@ -659,6 +664,15 @@ export function registerIpcHandlers(): void {
 
 	function getBrainService(projectPath?: string): ProjectBrainService {
 		if (projectPath) return ProjectBrainService.fromRepoRoot(projectPath)
+		// Walk up from the app root looking for .palot/brain/
+		const fallback = app.getAppPath()
+		if (fs.existsSync(path.join(fallback, ".palot", "brain"))) {
+			return ProjectBrainService.fromRepoRoot(fallback)
+		}
+		const parent = path.resolve(fallback, "..")
+		if (fs.existsSync(path.join(parent, ".palot", "brain"))) {
+			return ProjectBrainService.fromRepoRoot(parent)
+		}
 		return globalBrainService
 	}
 
@@ -686,6 +700,86 @@ export function registerIpcHandlers(): void {
 
 	ipcMain.handle("skills:brain-summary", withLogging("skills:brain-summary", () => globalBrainService.buildSummary()))
 
+	// --- Agents ---
+
+	// Load agents bundled with the app. Returns an empty array if the directory
+	// doesn't exist yet (e.g. first run before generation).
+	async function loadBuiltinAgents() {
+		const dir = path.join(__dirname, "builtin-agents")
+		const exists = await fsAsync.access(dir).then(() => true, () => false)
+		if (!exists) return []
+		const files = (await fsAsync.readdir(dir)).filter((f) => f.endsWith(".md")).sort()
+		return Promise.all(
+			files.map(async (file) => {
+				const raw = await fsAsync.readFile(path.join(dir, file), "utf-8")
+				return { ...parseAgentDocument(raw, file), origin: "builtin" as const }
+			}),
+		)
+	}
+
+	// Read agents from a project's .opencode/agents/ directory.
+	// Falls back to the app root (monorepo root in dev, package root in prod) when
+	// no projectPath is provided.
+	function getAgentService(projectPath?: string): AgentService {
+		if (projectPath) return AgentService.fromProjectDirectory(projectPath)
+		// In development, the app root may be the desktop package dir;
+		// walk up until we find .opencode/agents/
+		const fallback = app.getAppPath()
+		if (fs.existsSync(path.join(fallback, ".opencode", "agents"))) {
+			return AgentService.fromProjectDirectory(fallback)
+		}
+		// Try parent directory (monorepo root)
+		const parent = path.resolve(fallback, "..")
+		if (fs.existsSync(path.join(parent, ".opencode", "agents"))) {
+			return AgentService.fromProjectDirectory(parent)
+		}
+		// Last resort: app root (create the dir if missing)
+		return AgentService.fromProjectDirectory(fallback)
+	}
+
+	ipcMain.handle("agents:list", withLogging("agents:list", async (_, projectPath?: string) => {
+		const builtins = await loadBuiltinAgents()
+		const userAgents = await getAgentService(projectPath).list()
+		const userFilenames = new Set(userAgents.map((a) => a.filename))
+		const filteredBuiltins = builtins.filter((b) => !userFilenames.has(b.filename))
+		return [...userAgents, ...filteredBuiltins]
+	}))
+	ipcMain.handle("agents:get", withLogging("agents:get", (_, filename: string, projectPath?: string) =>
+		getAgentService(projectPath).get(filename),
+	))
+	ipcMain.handle("agents:write", withLogging("agents:write", (_, filename: string, raw: string, projectPath?: string) =>
+		getAgentService(projectPath).write(filename, raw),
+	))
+	ipcMain.handle("agents:delete", withLogging("agents:delete", (_, filename: string, projectPath?: string) =>
+		getAgentService(projectPath).delete(filename),
+	))
+
+	// --- Knowledge Sources (agent reference docs) ---
+
+	// Resolve the knowledge directory. When a projectPath is given, use
+	// the project-local .agents/knowledge/ directory. Otherwise walk up
+	// from the app root looking for .agents/knowledge/, with a final
+	// fallback to ~/.config/palot/knowledge/.
+	function getKnowledgeService(projectPath?: string): KnowledgeService {
+		if (projectPath) return KnowledgeService.fromProjectRoot(projectPath)
+		const fallback = app.getAppPath()
+		if (fs.existsSync(path.join(fallback, ".agents", "knowledge"))) {
+			return KnowledgeService.fromProjectRoot(fallback)
+		}
+		const parent = path.resolve(fallback, "..")
+		if (fs.existsSync(path.join(parent, ".agents", "knowledge"))) {
+			return KnowledgeService.fromProjectRoot(parent)
+		}
+		return KnowledgeService.fromHomeDirectory(app.getPath("home"))
+	}
+
+	ipcMain.handle("knowledge-src:list", withLogging("knowledge-src:list", (_, projectPath?: string) =>
+		getKnowledgeService(projectPath).list(),
+	))
+	ipcMain.handle("knowledge-src:get", withLogging("knowledge-src:get", (_, filename: string, projectPath?: string) =>
+		getKnowledgeService(projectPath).get(filename),
+	))
+
 	// --- Brain ---
 
 	ipcMain.handle("brain:list", withLogging("brain:list", (_, projectPath?: string) =>
@@ -711,6 +805,59 @@ export function registerIpcHandlers(): void {
 	ipcMain.handle("brain:context-summary", withLogging("brain:context-summary", (_, projectPath: string, sessionId?: string) =>
 		getBrainService(projectPath).buildContextSummary(sessionId),
 	))
+
+	// --- Mem9 (persistent memory) ---
+
+	ipcMain.handle("mem9:init", withLogging("mem9:init", (_, config?: { apiKey?: string; baseUrl?: string; agentId?: string }) => {
+		return mem9Service.init(config)
+	}))
+
+	ipcMain.handle("mem9:status", withLogging("mem9:status", () => {
+		return { initialized: mem9Service.initialized, configured: mem9Service.configured }
+	}))
+
+	ipcMain.handle("mem9:store", withLogging("mem9:store", async (_, input: {
+		content: string
+		source?: string
+		tags?: string[]
+		metadata?: Record<string, unknown>
+	}) => {
+		return mem9Service.store(input)
+	}))
+
+	ipcMain.handle("mem9:search", withLogging("mem9:search", async (_, params: {
+		q?: string
+		tags?: string
+		source?: string
+		limit?: number
+		offset?: number
+	}) => {
+		return mem9Service.search(params)
+	}))
+
+	ipcMain.handle("mem9:get", withLogging("mem9:get", async (_, id: string) => {
+		return mem9Service.get(id)
+	}))
+
+	ipcMain.handle("mem9:delete", withLogging("mem9:delete", async (_, id: string) => {
+		return mem9Service.remove(id)
+	}))
+
+	ipcMain.handle("mem9:recall", withLogging("mem9:recall", async (_, query: string, limit?: number) => {
+		return mem9Service.recall(query, limit)
+	}))
+
+	ipcMain.handle("mem9:embed-knowledge", withLogging("mem9:embed-knowledge", async (_, projectPath: string) => {
+		return mem9Service.embedKnowledgeFiles(projectPath)
+	}))
+
+	ipcMain.handle("mem9:embed-brain", withLogging("mem9:embed-brain", async (_, projectPath: string) => {
+		return mem9Service.embedBrainFiles(projectPath)
+	}))
+
+	ipcMain.handle("mem9:embed-all", withLogging("mem9:embed-all", async (_, projectPath: string) => {
+		return mem9Service.embedAllProjectFiles(projectPath)
+	}))
 
 	// --- Tasks ---
 

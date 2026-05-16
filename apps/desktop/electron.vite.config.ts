@@ -24,11 +24,27 @@ function copyDrizzleMigrations(): Plugin {
 	}
 }
 
+/** Copies bundled agent definitions into the main process output. */
+function copyBuiltinAgents(): Plugin {
+	const src = path.resolve(__dirname, "src/main/builtin-agents")
+	return {
+		name: "copy-builtin-agents",
+		writeBundle(options) {
+			if (!options.dir) return
+			const dest = path.join(options.dir, "builtin-agents")
+			if (fs.existsSync(src)) {
+				fs.cpSync(src, dest, { recursive: true })
+			}
+		},
+	}
+}
+
 export default defineConfig({
 	main: {
 		plugins: [
 			externalizeDepsPlugin({ exclude: ["@palot/configconv", "drizzle-orm"] }),
 			copyDrizzleMigrations(),
+			copyBuiltinAgents(),
 		],
 		build: {
 			rollupOptions: {

@@ -244,12 +244,12 @@ export function useAgentActions() {
 		[],
 	)
 
-	const createSession = useCallback(async (directory: string, title?: string) => {
+	const createSession = useCallback(async (directory: string, title?: string, parentID?: string) => {
 		const client = getProjectClient(directory)
 		if (!client) throw new Error("Not connected to OpenCode server")
-		log.debug("createSession", { directory, title })
+		log.debug("createSession", { directory, title, parentID })
 		try {
-			const result = await client.session.create({ title })
+			const result = await client.session.create({ title, parentID: parentID || undefined })
 			const session = result.data
 			if (session) {
 				appStore.set(upsertSessionAtom, { session, directory })

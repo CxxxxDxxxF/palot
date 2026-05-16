@@ -165,6 +165,18 @@ export interface SshServerConfig {
 export type ServerConfig = LocalServerConfig | RemoteServerConfig | SshServerConfig
 
 // ============================================================
+// Agent types
+// ============================================================
+
+export type AgentDef = ManagedAgent
+
+// ============================================================
+// Knowledge types
+// ============================================================
+
+export type KnowledgeSourceDef = import("../shared/knowledge").KnowledgeSource
+
+// ============================================================
 // Skills types
 // ============================================================
 
@@ -537,6 +549,14 @@ export interface PalotAPI {
 	createProjectDirectory: (name: string) => Promise<string | null>
 	showInFinder: (filePath: string) => Promise<void>
 
+	// Agents
+	agents: {
+		list: (projectPath?: string) => Promise<AgentDef[]>
+		get: (filename: string, projectPath?: string) => Promise<AgentDef | null>
+		write: (filename: string, raw: string, projectPath?: string) => Promise<string>
+		delete: (filename: string, projectPath?: string) => Promise<boolean>
+	}
+
 	// Skills
 	skills: {
 		list: () => Promise<Skill[]>
@@ -545,6 +565,37 @@ export interface PalotAPI {
 		write: (filename: string, raw: string) => Promise<string>
 		delete: (filename: string) => Promise<boolean>
 		brainSummary: () => Promise<string>
+	}
+
+	// Knowledge sources (agent reference docs)
+	sourceKnowledge: {
+		list: (projectPath?: string) => Promise<KnowledgeSourceDef[]>
+		get: (filename: string, projectPath?: string) => Promise<KnowledgeSourceDef | null>
+	}
+
+	// Mem9 (persistent memory)
+	mem9: {
+		init: (config?: { apiKey?: string; baseUrl?: string; agentId?: string }) => Promise<boolean>
+		status: () => Promise<{ initialized: boolean; configured: boolean }>
+		store: (input: {
+			content: string
+			source?: string
+			tags?: string[]
+			metadata?: Record<string, unknown>
+		}) => Promise<import("../main/mem9-service").Mem9Memory | null>
+		search: (params: {
+			q?: string
+			tags?: string
+			source?: string
+			limit?: number
+			offset?: number
+		}) => Promise<import("../main/mem9-service").Mem9SearchResult>
+		get: (id: string) => Promise<import("../main/mem9-service").Mem9Memory | null>
+		delete: (id: string) => Promise<boolean>
+		recall: (query: string, limit?: number) => Promise<string | null>
+		embedKnowledge: (projectPath: string) => Promise<number>
+		embedBrain: (projectPath: string) => Promise<number>
+		embedAll: (projectPath: string) => Promise<number>
 	}
 
 	// Brain
@@ -676,4 +727,5 @@ declare global {
 		palot: PalotAPI
 	}
 }
+import type { ManagedAgent } from "../shared/agents"
 import type { ManagedSkill } from "../shared/skills"

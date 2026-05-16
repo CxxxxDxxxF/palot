@@ -1,7 +1,7 @@
 ---
 title: Task Graph
 tags: [tasks, planning]
-updated: 2026-05-14
+updated: 2026-05-14 (heartbeat-recovery + pipeline-integration-test completed)
 ---
 
 # Task Graph
@@ -10,9 +10,9 @@ updated: 2026-05-14
 
 | taskId | title | role | status | dependencies | estimatedComplexity | recommendedModel | filesOwned |
 |--------|-------|------|--------|-------------|---------------------|-----------------|-----------|
-| heartbeat-recovery | Automatic recovery loop for stalled child sessions | builder | pending | | medium | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/renderer/atoms/session-heartbeats.ts`, `apps/desktop/src/renderer/components/multi-agent-panel.tsx`, `apps/desktop/src/renderer/hooks/use-server.ts` |
+| heartbeat-recovery | Automatic recovery loop for stalled child sessions | builder | completed | | medium | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/renderer/atoms/session-heartbeats.ts`, `apps/desktop/src/renderer/components/multi-agent-panel.tsx`, `apps/desktop/src/renderer/hooks/use-server.ts` |
 | budget-thresholds-ui | User-configurable budget thresholds settings UI | builder | pending | | medium | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/renderer/lib/supervision-policy.ts`, `apps/desktop/src/renderer/components/settings-*.tsx` |
-| pipeline-integration-test | End-to-end integration test for Lead → Architect → Builder → Reviewer flow | builder | pending | heartbeat-recovery, budget-thresholds-ui | high | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/renderer/atoms/sub-agents.test.ts` |
+| pipeline-integration-test | End-to-end integration test for Lead → Architect → Builder → Reviewer flow | builder | completed | heartbeat-recovery | high | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/renderer/lib/pipeline-integration.test.ts` |
 | project-brain-service | ProjectBrainService + TaskGraphService + IPC wiring | builder | pending | | medium | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/main/project-brain-service.ts`, `apps/desktop/src/main/task-graph-service.ts`, `apps/desktop/src/shared/tasks.ts` |
 | external-skills-scan | External skills repository scanning in SkillsService | builder | pending | | low | openrouter/deepseek/deepseek-chat-v3.1 | `apps/desktop/src/main/skills-service.ts`, `apps/desktop/src/shared/skills.ts` |
 

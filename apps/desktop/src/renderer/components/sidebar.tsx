@@ -14,7 +14,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@palot/ui/components/to
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useAtomValue } from "jotai"
 import {
+	BookOpenIcon,
 	BotIcon,
+	BrainIcon,
 	CommandIcon,
 	GraduationCapIcon,
 	PlusIcon,
@@ -373,6 +375,26 @@ export function AppSidebarContent({
 						>
 							<GraduationCapIcon className="size-4" />
 							<span>Skills</span>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							tooltip="Knowledge"
+							onClick={() => navigate({ to: "/knowledge" })}
+							className="text-muted-foreground"
+						>
+							<BookOpenIcon className="size-4" />
+							<span>Knowledge</span>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							tooltip="Brain"
+							onClick={() => navigate({ to: "/brain" })}
+							className="text-muted-foreground"
+						>
+							<BrainIcon className="size-4" />
+							<span>Brain</span>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
 					<SidebarMenuItem>

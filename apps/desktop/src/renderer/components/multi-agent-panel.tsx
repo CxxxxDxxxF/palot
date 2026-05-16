@@ -6,17 +6,18 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@palot/ui/components/tooltip"
 import { cn } from "@palot/ui/lib/utils"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { useAtomValue } from "jotai"
+import { useAtomValue, useSetAtom } from "jotai"
 import {
 	AlertCircleIcon,
 	CheckCircle2Icon,
 	CircleDotIcon,
 	Loader2Icon,
 	TimerIcon,
+	UserIcon,
 	ZapIcon,
 } from "lucide-react"
 import type React from "react"
-import { memo, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useState } from "react"
 import type { SubAgentEntry } from "../atoms/sub-agents"
 import { childSessionsFamily } from "../atoms/sub-agents"
 import { sessionMetricsFamily } from "../atoms/derived/session-metrics"
@@ -27,12 +28,19 @@ import {
 	getAgentStatusLabel,
 	getBudgetDisplay,
 } from "../lib/agent-progress-display"
+import { PipelineProgress } from "./pipeline-progress"
 import {
 	evaluateAgentHeartbeat,
 	type AgentHeartbeatStatus,
 } from "../lib/agent-heartbeat"
 import { createLogger } from "../lib/logger"
+import { useAgentRecovery } from "../hooks/use-agent-recovery"
 import { useSubAgentCompletion } from "../hooks/use-subagent-completion"
+import type { KnowledgeSource } from "../../shared/knowledge"
+import { getKnowledgeSource, mem9Recall } from "../services/backend"
+import { useMem9MemoryStorage } from "../hooks/use-mem9-memory"
+import { TeamRoster } from "./team-roster"
+import { recoveryConfigFamily, recoveryStateFamily } from "../atoms/session-heartbeats"
 import { supervisionEventsForWorkflowFamily } from "../atoms/supervision-events"
 import type { AgentStatus } from "../lib/types"
 import { formatCost, formatTokens, formatWorkDuration } from "../lib/session-metrics"
@@ -40,6 +48,13 @@ import { evaluateAgentWorkflowPolicy } from "../lib/agent-workflow-policy"
 import { DEFAULT_SUPERVISION_POLICY, evaluateSupervisionPolicy } from "../lib/supervision-policy"
 
 const log = createLogger("multi-agent-panel")
+
+/** Parse "providerID/modelID" from a model string like "openrouter/deepseek/deepseek-chat". */
+function parseModelString(model: string): { providerID: string; modelID: string } | null {
+	const parts = model.split("/")
+	if (parts.length < 2) return null
+	return { providerID: parts[0], modelID: parts.slice(1).join("/") }
+}
 
 // ============================================================
 // Status display helpers
@@ -123,12 +138,20 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const parentMetrics = useAtomValue(sessionMetricsFamily(parentSessionId))
 	const recentEvents = useAtomValue(supervisionEventsForWorkflowFamily(parentSessionId))
 	const now = useHeartbeatNow()
-	const { abort, sendPrompt } = useAgentActions()
+	const { abort, sendPrompt, createSession } = useAgentActions()
+	const recoveryConfig = useAtomValue(recoveryConfigFamily(parentSessionId))
+	const setRecoveryConfig = useSetAtom(recoveryConfigFamily(parentSessionId))
 
 	// Feature 7: auto-record subagent completions to supervisor state
 	useSubAgentCompletion(parentSessionId, parentEntry?.directory)
 
-	if (children.length === 0 && parentMetrics.tokensRaw === 0) return null
+	// Mem9: auto-store subagent completions as persistent memories
+	useMem9MemoryStorage(parentSessionId, parentEntry?.directory)
+
+	// Auto-recovery loop for stalled/unresponsive child sessions
+	useAgentRecovery(parentSessionId, parentEntry?.directory ?? "")
+
+	const isIdle = children.length === 0 && parentMetrics.tokensRaw === 0
 
 	const parentStatus: AgentStatus =
 		(parentEntry?.permissions.length ?? 0) > 0 || (parentEntry?.questions.length ?? 0) > 0
@@ -215,6 +238,74 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				? "border-amber-400/30 bg-amber-400/10 text-amber-200"
 				: "border-border/30 bg-muted/15 text-muted-foreground"
 
+	const handleSpawn = useCallback(
+		async (
+			dir: string,
+			_sessionId: string,
+			agentName: string,
+			_agentDescription: string,
+			agentModel: string,
+			_agentPrompt: string,
+			customInstruction: string,
+			knowledgeFilenames?: string[],
+		) => {
+			// Create a child session linked to the Lead
+			const child = await createSession(dir, agentName, parentSessionId)
+			if (!child) {
+				throw new Error(`Failed to create session for ${agentName}`)
+			}
+
+			// Build prompt: Mem9 recall + knowledge context + custom instruction
+			let promptParts: string[] = []
+
+			// 1. Mem9 semantic recall (if configured)
+			try {
+				const recallQuery = [agentName, customInstruction, agentName].filter(Boolean).join(" ")
+				const memories = await mem9Recall(recallQuery, 5)
+				if (memories) {
+					promptParts.push(memories)
+					promptParts.push("")
+				}
+			} catch {
+				// Mem9 failure is non-blocking
+			}
+
+			// 2. If knowledge sources are selected, fetch them and add to the prompt
+			if (knowledgeFilenames && knowledgeFilenames.length > 0) {
+				const sources: (KnowledgeSource | null)[] = await Promise.all(
+					knowledgeFilenames.map((f) => getKnowledgeSource(f, dir)),
+				)
+				const validSources = sources.filter(Boolean) as KnowledgeSource[]
+				if (validSources.length > 0) {
+					promptParts.push("## Reference Knowledge", "")
+					for (const src of validSources) {
+						promptParts.push(`### ${src.title}`)
+						promptParts.push("")
+						promptParts.push(src.prompt)
+						promptParts.push("")
+					}
+				}
+			}
+
+			// 3. Custom instruction or fallback
+			if (customInstruction) {
+				promptParts.push(`## Task\n\n${customInstruction}`)
+			} else if (promptParts.length === 0) {
+				promptParts.push(`Begin your work as ${agentName}.`)
+			}
+
+			const prompt = promptParts.join("\n")
+
+			// Pass model + agent name so the server uses the right config
+			const model = agentModel ? parseModelString(agentModel) : undefined
+			await sendPrompt(dir, child.id, prompt, {
+				agent: agentName.toLowerCase(),
+				model: model ?? undefined,
+			})
+		},
+		[parentSessionId, createSession, sendPrompt],
+	)
+
 	return (
 		<SidebarGroup>
 			<SidebarGroupLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
@@ -232,7 +323,63 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 			</SidebarGroupLabel>
 			<SidebarGroupContent>
 				<div className="space-y-1 px-2 pb-1">
-					{entries.map((entry) => (
+					{isIdle ? (
+						/* Idle state — large invitation to spawn agents */
+						<div className="px-1 py-2">
+							<p className="mb-2 text-[10px] leading-relaxed text-muted-foreground/60">
+								Your team is ready. Spawn agents to start building.
+							</p>
+							<TeamRoster
+								directory={parentEntry?.directory ?? ""}
+								sessionId={parentSessionId}
+								onSpawn={handleSpawn}
+							/>
+						</div>
+					) : (
+						<>
+					{/* Lead row always renders first */}
+					<SubAgentRow
+						key={lead.sessionId}
+						entry={lead}
+						totalTokens={totalTokens}
+						now={now}
+						onRestart={async (target) => {
+							try {
+								await abort(target.directory, target.sessionId)
+								await sendPrompt(
+									target.directory,
+									target.sessionId,
+									"Restart from the last known objective. Summarize current state first, then continue with the next safe step.",
+								)
+							} catch (err) {
+								log.error("restart stalled agent failed", { sessionId: target.sessionId }, err)
+							}
+						}}
+						onTerminate={async (target) => {
+							try {
+								await abort(target.directory, target.sessionId)
+							} catch (err) {
+								log.error("terminate stalled agent failed", { sessionId: target.sessionId }, err)
+							}
+						}}
+					/>
+
+					{/* Pipeline visualization — shows Lead → Architect → Builder → Reviewer flow */}
+					<PipelineProgress
+						children={children}
+						parentStatus={
+							parentStatus === "idle"
+								? "completed"
+								: parentStatus === "waiting"
+									? "pending"
+									: parentStatus
+						}
+						parentCost={parentMetrics.costRaw}
+						parentTokens={parentMetrics.tokensRaw}
+					/>
+
+					{/* Child sub-agent rows */}
+					{children.map((entry) => (
 						<SubAgentRow
 							key={entry.sessionId}
 							entry={entry}
@@ -285,6 +432,23 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 								Parallel is supported for planning, research, docs, and isolated file ownership.
 								Shared writes stay sequential unless locking is available.
 							</p>
+							<div className="mt-2 flex items-center justify-between gap-2 border-t border-border/20 pt-2">
+								<span className="font-medium text-muted-foreground">Auto-recovery</span>
+								<button
+									type="button"
+									onClick={() =>
+										setRecoveryConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
+									}
+									className={cn(
+										"rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors",
+										recoveryConfig.enabled
+											? "border border-emerald-400/30 bg-emerald-400/20 text-emerald-300"
+											: "border border-border/30 bg-muted/30 text-muted-foreground/60",
+									)}
+								>
+									{recoveryConfig.enabled ? "ON" : "OFF"}
+								</button>
+							</div>
 						</div>
 					)}
 					{recentEvents.length > 0 && (
@@ -338,6 +502,24 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							</span>
 						</div>
 					</div>
+				</>
+			)}
+					{/* Team roster — always accessible, both idle and active */}
+					{!isIdle && (
+						<details className="group rounded-md border border-border/30 bg-muted/10 px-2.5 py-2">
+							<summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60 hover:text-muted-foreground/80 transition-colors list-none flex items-center gap-1.5">
+								<UserIcon className="size-3" aria-hidden="true" />
+								Spawn More Agents
+							</summary>
+							<div className="pt-2">
+								<TeamRoster
+									directory={parentEntry?.directory ?? ""}
+									sessionId={parentSessionId}
+									onSpawn={handleSpawn}
+								/>
+							</div>
+						</details>
+					)}
 				</div>
 			</SidebarGroupContent>
 		</SidebarGroup>
@@ -363,6 +545,7 @@ function SubAgentRow({
 }) {
 	const navigate = useNavigate()
 	const { projectSlug } = useParams({ strict: false }) as { projectSlug?: string }
+	const childRecoveryState = useAtomValue(recoveryStateFamily(entry.sessionId))
 
 	const Icon = statusIcon(entry.agentStatus)
 	const iconColor = statusColor(entry.agentStatus)
@@ -491,6 +674,12 @@ function SubAgentRow({
 							<>
 								<span>·</span>
 								<span className="text-red-400">{entry.errorCount} err</span>
+							</>
+						)}
+						{childRecoveryState.restartCount > 0 && (
+							<>
+								<span>·</span>
+								<span className="text-amber-400">{childRecoveryState.restartCount}x rst</span>
 							</>
 						)}
 						{entry.model && (

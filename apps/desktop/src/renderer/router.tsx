@@ -19,6 +19,8 @@ import { GeneralSettings } from "./components/settings/general-settings"
 import { NotificationSettings } from "./components/settings/notification-settings"
 import { ProviderSettings } from "./components/settings/provider-settings"
 import { ServerSettings } from "./components/settings/server-settings"
+import { BrainPage } from "./components/brain-page"
+import { KnowledgePage } from "./components/knowledge-page"
 import { SkillsPage } from "./components/skills-page"
 import { SettingsPage } from "./components/settings/settings-page"
 import { SetupSettings } from "./components/settings/setup-settings"
@@ -126,6 +128,18 @@ const skillsRoute = createRoute({
 	component: SkillsPage,
 })
 
+const knowledgeRoute = createRoute({
+	getParentRoute: () => sidebarLayout,
+	path: "knowledge",
+	component: KnowledgePage,
+})
+
+const brainRoute = createRoute({
+	getParentRoute: () => sidebarLayout,
+	path: "brain",
+	component: BrainPage,
+})
+
 const automationsRoute = createRoute({
 	getParentRoute: () => sidebarLayout,
 	path: "automations",
@@ -160,6 +174,8 @@ const routeTree = rootRoute.addChildren([
 		indexRoute,
 		projectRoute.addChildren([projectIndexRoute, sessionRoute]),
 		skillsRoute,
+		knowledgeRoute,
+		brainRoute,
 		automationsRoute.addChildren([
 			automationsIndexRoute,
 			automationDetailRoute.addChildren([automationDetailIndexRoute, automationRunRoute]),
