@@ -1,7 +1,7 @@
 ---
 name: mcp-developer
 description: 'Use this agent when you need to build, debug, or optimize Model Context Protocol (MCP) servers and clients that connect AI systems to external tools and data sources.'
-model: openrouter/deepseek/deepseek-chat-v3.1
+model: openrouter/deepseek/deepseek-r1
 mode: subagent
 color: accent
 team: specialized

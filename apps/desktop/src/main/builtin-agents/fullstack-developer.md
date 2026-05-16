@@ -1,7 +1,7 @@
 ---
 name: fullstack-developer
 description: 'Use this agent when you need to build complete features spanning database, API, and frontend layers together as a cohesive unit.'
-model: openrouter/deepseek/deepseek-chat-v3.1
+model: openrouter/deepseek/deepseek-r1
 mode: subagent
 color: accent
 team: engineering

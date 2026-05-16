@@ -1,7 +1,7 @@
 ---
 name: research-analyst
 description: 'Use this agent when you need comprehensive research across multiple sources with synthesis of findings into actionable insights, trend identification, and detailed reporting.'
-model: openrouter/deepseek/deepseek-chat-v3.1
+model: openrouter/deepseek/deepseek-r1
 mode: subagent
 color: info
 team: research

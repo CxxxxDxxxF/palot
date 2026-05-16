@@ -16,9 +16,10 @@ import { Input } from "@palot/ui/components/input"
 import { Label } from "@palot/ui/components/label"
 import { cn } from "@palot/ui/lib/utils"
 import {
+	AlertCircleIcon,
+	BarChart3Icon,
 	BotIcon,
 	CrownIcon,
-	BarChart3Icon,
 	LayoutGridIcon,
 	ListIcon,
 	Loader2Icon,
@@ -28,7 +29,7 @@ import {
 	XIcon,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import type { AgentPerformanceSummary } from "../../shared/agent-performance"
+import type { AgentPerformanceLedger, AgentPerformanceSummary } from "../../shared/agent-performance"
 import type { ManagedAgent } from "../../shared/agents"
 import { buildAgentRaw, filenameFromAgentName } from "../../shared/agents"
 import { deleteAgent, listAgentPerformance, listAgents, writeAgent } from "../services/backend"
@@ -552,13 +553,225 @@ function InspectDialog({ agent, performanceByAgent, onClose, onDelete }: Inspect
 }
 
 // ============================================================
+// Performance analytics view
+// ============================================================
+
+function scoreColor(score: number): string {
+	if (score >= 80) return "text-emerald-400"
+	if (score >= 60) return "text-amber-400"
+	return "text-red-400"
+}
+
+function ScoreBar({ score }: { score: number }) {
+	const color = score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-red-500"
+	return (
+		<div className="flex items-center gap-2">
+			<div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted/40">
+				<div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${score}%` }} />
+			</div>
+			<span className={cn("tabular-nums text-xs font-semibold", scoreColor(score))}>{Math.round(score)}</span>
+		</div>
+	)
+}
+
+function fmt(ms: number): string {
+	if (ms < 60_000) return `${Math.round(ms / 1000)}s`
+	if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`
+	return `${(ms / 3_600_000).toFixed(1)}h`
+}
+
+interface PerformanceViewProps {
+	ledger: AgentPerformanceLedger
+	onAgentClick?: (agentName: string) => void
+}
+
+function PerformanceView({ ledger, onAgentClick }: PerformanceViewProps) {
+	const [sortKey, setSortKey] = useState<"avgScore" | "successRate" | "runs" | "totalCostUsd" | "totalDurationMs">("avgScore")
+	const [sortAsc, setSortAsc] = useState(false)
+
+	const needsAttention = ledger.agents.filter((a) => a.needsAttention)
+	const totalRuns = ledger.agents.reduce((s, a) => s + a.runs, 0)
+	const totalCost = ledger.agents.reduce((s, a) => s + a.totalCostUsd, 0)
+	const totalTime = ledger.agents.reduce((s, a) => s + a.totalDurationMs, 0)
+	const overallScore = ledger.agents.length
+		? ledger.agents.reduce((s, a) => s + a.avgScore * a.runs, 0) / Math.max(totalRuns, 1)
+		: 0
+
+	const sorted = useMemo(() => {
+		return [...ledger.agents].sort((a, b) => {
+			const delta = (a[sortKey] as number) - (b[sortKey] as number)
+			return sortAsc ? delta : -delta
+		})
+	}, [ledger.agents, sortKey, sortAsc])
+
+	function toggleSort(key: typeof sortKey) {
+		if (sortKey === key) setSortAsc((v) => !v)
+		else { setSortKey(key); setSortAsc(false) }
+	}
+
+	function SortHeader({ label, k }: { label: string; k: typeof sortKey }) {
+		const active = sortKey === k
+		return (
+			<button type="button" onClick={() => toggleSort(k)} className={cn("text-[10px] font-semibold uppercase tracking-wide transition-colors", active ? "text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground")}>
+				{label}{active ? (sortAsc ? " ↑" : " ↓") : ""}
+			</button>
+		)
+	}
+
+	if (ledger.records.length === 0) {
+		return (
+			<div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+				<BarChart3Icon className="size-10 text-muted-foreground/20" />
+				<div>
+					<p className="text-sm font-medium">No performance data yet</p>
+					<p className="mt-1 text-xs text-muted-foreground">Data is recorded automatically as agents complete runs.</p>
+				</div>
+			</div>
+		)
+	}
+
+	return (
+		<div className="flex flex-col gap-4 overflow-y-auto p-5">
+			{/* Summary cards */}
+			<div className="grid grid-cols-4 gap-3">
+				{[
+					{ label: "Total Runs", value: totalRuns.toString() },
+					{ label: "Avg Score", value: `${Math.round(overallScore)}`, color: scoreColor(overallScore) },
+					{ label: "Total Cost", value: `$${totalCost.toFixed(3)}` },
+					{ label: "Total Time", value: fmt(totalTime) },
+				].map(({ label, value, color }) => (
+					<div key={label} className="rounded-xl border border-border/40 bg-muted/10 px-4 py-3">
+						<p className="text-[10px] uppercase tracking-wide text-muted-foreground/60">{label}</p>
+						<p className={cn("mt-1 text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
+					</div>
+				))}
+			</div>
+
+			{/* Needs attention */}
+			{needsAttention.length > 0 && (
+				<div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+					<div className="mb-2 flex items-center gap-2">
+						<AlertCircleIcon className="size-3.5 text-red-400" />
+						<span className="text-xs font-semibold text-red-400">Needs Attention ({needsAttention.length})</span>
+						<span className="text-[10px] text-muted-foreground/60">— low success rate or score below threshold</span>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						{needsAttention.map((a) => {
+							const teamMeta = a.team ? TEAM_META[a.team] : undefined
+							return (
+								<button key={a.agentName} type="button" onClick={() => onAgentClick?.(a.agentName)} className="flex items-center gap-1.5 rounded-md border border-red-500/20 bg-red-500/8 px-2.5 py-1 text-xs text-foreground/80 transition-colors hover:bg-red-500/15">
+									{teamMeta && <span className={cn("size-1.5 rounded-full", teamMeta.bg.replace("bg-", "bg-").replace("/8", ""))} />}
+									<span>{a.agentName}</span>
+									<span className={cn("font-semibold", scoreColor(a.avgScore))}>{Math.round(a.avgScore)}</span>
+								</button>
+							)
+						})}
+					</div>
+				</div>
+			)}
+
+			{/* Agent leaderboard */}
+			<div className="rounded-xl border border-border/40 overflow-hidden">
+				<div className="flex items-center justify-between border-b border-border/40 bg-muted/10 px-4 py-2">
+					<span className="text-xs font-semibold">Agent Leaderboard</span>
+					<span className="text-[10px] text-muted-foreground/50">{sorted.length} agents tracked</span>
+				</div>
+				<div className="overflow-x-auto">
+					<table className="w-full text-xs">
+						<thead>
+							<tr className="border-b border-border/30 bg-muted/5">
+								<th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Agent</th>
+								<th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Team</th>
+								<th className="px-3 py-2 text-right"><SortHeader label="Score" k="avgScore" /></th>
+								<th className="px-3 py-2 text-right"><SortHeader label="Success" k="successRate" /></th>
+								<th className="px-3 py-2 text-right"><SortHeader label="Runs" k="runs" /></th>
+								<th className="px-3 py-2 text-right"><SortHeader label="Time" k="totalDurationMs" /></th>
+								<th className="px-3 py-2 text-right"><SortHeader label="Cost" k="totalCostUsd" /></th>
+								<th className="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">Status</th>
+							</tr>
+						</thead>
+						<tbody>
+							{sorted.map((a) => {
+								const teamMeta = a.team ? TEAM_META[a.team] : undefined
+								return (
+									<tr key={a.agentName} className="border-b border-border/20 transition-colors hover:bg-muted/20">
+										<td className="px-4 py-2">
+											<button type="button" onClick={() => onAgentClick?.(a.agentName)} className="flex items-center gap-1.5 font-medium text-foreground/85 hover:text-foreground">
+												{a.teamRole === "leader" && <CrownIcon className="size-2.5 text-amber-400 shrink-0" />}
+												<span className="truncate max-w-40">{a.agentName}</span>
+											</button>
+										</td>
+										<td className="px-3 py-2">
+											{teamMeta && <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", teamMeta.bg, teamMeta.color)}>{teamMeta.displayName}</span>}
+										</td>
+										<td className="px-3 py-2"><div className="flex justify-end"><ScoreBar score={a.avgScore} /></div></td>
+										<td className={cn("px-3 py-2 text-right tabular-nums", a.successRate >= 0.8 ? "text-emerald-400" : a.successRate >= 0.6 ? "text-amber-400" : "text-red-400")}>
+											{Math.round(a.successRate * 100)}%
+										</td>
+										<td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{a.runs}</td>
+										<td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmt(a.totalDurationMs)}</td>
+										<td className="px-3 py-2 text-right tabular-nums text-muted-foreground">${a.totalCostUsd.toFixed(3)}</td>
+										<td className="px-3 py-2 text-center">
+											{a.needsAttention
+												? <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-medium text-red-400">needs work</span>
+												: <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">good</span>
+											}
+										</td>
+									</tr>
+								)
+							})}
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			{/* Team breakdown + Model comparison */}
+			<div className="grid grid-cols-2 gap-4">
+				{/* Teams */}
+				<div className="rounded-xl border border-border/40 overflow-hidden">
+					<div className="border-b border-border/40 bg-muted/10 px-4 py-2 text-xs font-semibold">Teams</div>
+					<div className="divide-y divide-border/20">
+						{ledger.teams.map((t) => {
+							const meta = TEAM_META[t.team] ?? { displayName: t.team, color: "text-muted-foreground", bg: "bg-muted/10" }
+							return (
+								<div key={t.team} className="flex items-center gap-3 px-4 py-2.5">
+									<span className={cn("text-xs font-medium w-28 truncate", meta.color)}>{meta.displayName}</span>
+									<div className="flex-1"><ScoreBar score={t.avgScore} /></div>
+									<span className="text-[10px] text-muted-foreground/60 tabular-nums w-10 text-right">{t.runs}r</span>
+									{t.needsAttention && <AlertCircleIcon className="size-3 text-red-400 shrink-0" />}
+								</div>
+							)
+						})}
+					</div>
+				</div>
+
+				{/* Models */}
+				<div className="rounded-xl border border-border/40 overflow-hidden">
+					<div className="border-b border-border/40 bg-muted/10 px-4 py-2 text-xs font-semibold">Models</div>
+					<div className="divide-y divide-border/20">
+						{ledger.models.map((m) => (
+							<div key={m.model} className="flex items-center gap-3 px-4 py-2.5">
+								<span className="truncate text-[10px] font-mono text-muted-foreground/70 max-w-[140px]">{m.model.split("/").slice(-1)[0]}</span>
+								<div className="flex-1"><ScoreBar score={m.avgScore} /></div>
+								<span className="text-[10px] text-muted-foreground/60 tabular-nums">${m.avgCostPerRun.toFixed(3)}/run</span>
+							</div>
+						))}
+					</div>
+				</div>
+			</div>
+		</div>
+	)
+}
+
+// ============================================================
 // AgentsPage
 // ============================================================
 
-type ViewMode = "org" | "list"
+type ViewMode = "org" | "list" | "perf"
 
 export function AgentsPage() {
 	const [agents, setAgents] = useState<ManagedAgent[]>([])
+	const [ledger, setLedger] = useState<AgentPerformanceLedger | null>(null)
 	const [performanceByAgent, setPerformanceByAgent] = useState(new Map<string, AgentPerformanceSummary>())
 	const [viewMode, setViewMode] = useState<ViewMode>("org")
 	const [selected, setSelected] = useState<ManagedAgent | null>(null)
@@ -575,6 +788,7 @@ export function AgentsPage() {
 				listAgentPerformance(),
 			])
 			setAgents(agentList)
+			setLedger(performance)
 			setPerformanceByAgent(new Map(performance.agents.map((agent) => [agent.agentName, agent])))
 		}
 		catch (err) { setError(err instanceof Error ? err.message : "Failed to load agents.") }
@@ -632,6 +846,13 @@ export function AgentsPage() {
 						>
 							<ListIcon className="size-3" />List
 						</button>
+						<button
+							type="button"
+							onClick={() => setViewMode("perf")}
+							className={cn("flex items-center gap-1.5 border-l border-border px-2.5 py-1.5 text-xs transition-colors", viewMode === "perf" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}
+						>
+							<BarChart3Icon className="size-3" />Perf
+						</button>
 					</div>
 					<Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
 						<PlusIcon className="mr-1 size-3.5" />Create
@@ -652,6 +873,22 @@ export function AgentsPage() {
 			) : viewMode === "org" ? (
 				<div className="flex-1 overflow-hidden">
 					<OrgChartView agents={agents} onSelect={handleOrgSelect} />
+				</div>
+			) : viewMode === "perf" ? (
+				<div className="flex-1 overflow-hidden">
+					{ledger ? (
+						<PerformanceView
+							ledger={ledger}
+							onAgentClick={(name) => {
+								const agent = agents.find((a) => a.name === name)
+								if (agent) setInspecting(agent)
+							}}
+						/>
+					) : (
+						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+							No performance data yet — run some agents to start tracking.
+						</div>
+					)}
 				</div>
 			) : (
 				<div className="flex-1 overflow-hidden">

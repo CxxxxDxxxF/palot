@@ -1,7 +1,7 @@
 ---
 name: product-manager
 description: 'Use this agent when you need to make product strategy decisions, prioritize features, or define roadmap plans based on user needs and business goals.'
-model: openrouter/deepseek/deepseek-chat-v3.1
+model: openrouter/deepseek/deepseek-r1
 mode: subagent
 color: success
 team: business

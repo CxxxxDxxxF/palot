@@ -1,7 +1,7 @@
 ---
 name: python-pro
 description: 'Use this agent when you need to build type-safe, production-ready Python code for web APIs, system utilities, or complex applications requiring modern async patterns and extensive type coverage.'
-model: openrouter/deepseek/deepseek-chat-v3.1
+model: openrouter/deepseek/deepseek-r1
 mode: subagent
 color: info
 team: languages
