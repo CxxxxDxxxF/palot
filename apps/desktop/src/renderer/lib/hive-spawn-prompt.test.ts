@@ -47,4 +47,17 @@ describe("buildHiveSpawnPrompt", () => {
 		expect(prompt).toContain("Begin your work as qa-expert.")
 		expect(prompt).toContain("If a project skill applies")
 	})
+
+	test("surfaces non-blocking context warnings", () => {
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "debugger",
+			agentDescription: "",
+			customInstruction: "Investigate the failure.",
+			warnings: ["Brain context unavailable: timeout"],
+		})
+
+		expect(prompt).toContain("## Context Warnings")
+		expect(prompt).toContain("- Brain context unavailable: timeout")
+		expect(prompt).toContain("report these warnings back to the Boss")
+	})
 })

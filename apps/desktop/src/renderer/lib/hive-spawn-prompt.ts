@@ -16,6 +16,7 @@ export interface HiveSpawnPromptInput {
 	memories?: string | null
 	knowledgeSections?: Array<{ title: string; prompt: string }>
 	skills?: ManagedSkill[]
+	warnings?: string[]
 }
 
 function normalize(text: string): string {
@@ -103,6 +104,17 @@ export function buildHiveSpawnPrompt(input: HiveSpawnPromptInput): string {
 
 	if (input.memories) {
 		parts.push("", input.memories)
+	}
+
+	if (input.warnings && input.warnings.length > 0) {
+		parts.push(
+			"",
+			"## Context Warnings",
+			"",
+			...input.warnings.map((warning) => `- ${warning}`),
+			"",
+			"Continue if safe, but report these warnings back to the Boss.",
+		)
 	}
 
 	parts.push("", ...formatSkills(input.agentName, task, input.skills))

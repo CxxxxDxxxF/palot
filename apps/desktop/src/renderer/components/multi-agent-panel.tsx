@@ -64,6 +64,10 @@ function parseModelString(model: string): { providerID: string; modelID: string 
 	return { providerID: parts[0], modelID: parts.slice(1).join("/") }
 }
 
+function formatErrorMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err)
+}
+
 // ============================================================
 // Status display helpers
 // ============================================================
@@ -155,7 +159,11 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	useEffect(() => {
 		listAgents(parentEntry?.directory ?? undefined)
 			.then(setKnownAgents)
-			.catch(() => {})
+			.catch((err) => {
+				log.warn("Failed to load agent metadata for team-aware pipeline", {
+					error: formatErrorMessage(err),
+				})
+			})
 	}, [parentEntry?.directory])
 
 	// Feature 7: auto-record subagent completions to supervisor state
@@ -273,25 +281,65 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				throw new Error(`Failed to create session for ${agentName}`)
 			}
 
+			const contextWarnings: string[] = []
 			const [brainContext, skills] = await Promise.all([
-				getBrainContextSummary(dir, parentSessionId).catch(() => null),
-				listAllSkills().catch(() => []),
+				getBrainContextSummary(dir, parentSessionId).catch((err) => {
+					const message = `Brain context unavailable: ${formatErrorMessage(err)}`
+					contextWarnings.push(message)
+					log.warn("Failed to load Brain context for spawned agent", {
+						agentName,
+						error: formatErrorMessage(err),
+					})
+					return null
+				}),
+				listAllSkills().catch((err) => {
+					const message = `Skill list unavailable: ${formatErrorMessage(err)}`
+					contextWarnings.push(message)
+					log.warn("Failed to load skills for spawned agent", {
+						agentName,
+						error: formatErrorMessage(err),
+					})
+					return []
+				}),
 			])
 
 			let memories: string | null = null
 			try {
 				const recallQuery = [agentName, customInstruction, agentName].filter(Boolean).join(" ")
 				memories = await mem9Recall(recallQuery, 5)
-			} catch {
-				// Mem9 failure is non-blocking
+			} catch (err) {
+				const message = `Mem9 recall unavailable: ${formatErrorMessage(err)}`
+				contextWarnings.push(message)
+				log.warn("Failed to recall Mem9 memories for spawned agent", {
+					agentName,
+					error: formatErrorMessage(err),
+				})
 			}
 
 			let knowledgeSections: Array<{ title: string; prompt: string }> = []
 			if (knowledgeFilenames && knowledgeFilenames.length > 0) {
-				const sources: (KnowledgeSource | null)[] = await Promise.all(
-					knowledgeFilenames.map((f) => getKnowledgeSource(f, dir)),
+				const sourceResults = await Promise.allSettled(
+					knowledgeFilenames.map((filename) => getKnowledgeSource(filename, dir)),
 				)
-				const validSources = sources.filter(Boolean) as KnowledgeSource[]
+				const validSources: KnowledgeSource[] = []
+				for (let i = 0; i < sourceResults.length; i++) {
+					const result = sourceResults[i]
+					const filename = knowledgeFilenames[i]
+					if (result.status === "fulfilled" && result.value) {
+						validSources.push(result.value)
+						continue
+					}
+
+					const reason =
+						result.status === "rejected" ? formatErrorMessage(result.reason) : "source not found"
+					const message = `Knowledge source ${filename} unavailable: ${reason}`
+					contextWarnings.push(message)
+					log.warn("Failed to load knowledge source for spawned agent", {
+						agentName,
+						filename,
+						error: reason,
+					})
+				}
 				knowledgeSections = validSources.map((src) => ({ title: src.title, prompt: src.prompt }))
 			}
 
@@ -303,6 +351,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				memories,
 				knowledgeSections,
 				skills,
+				warnings: contextWarnings,
 			})
 
 			// Pass model + agent name so the server uses the right config
