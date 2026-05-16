@@ -37,7 +37,13 @@ import { createLogger } from "../lib/logger"
 import { useAgentRecovery } from "../hooks/use-agent-recovery"
 import { useSubAgentCompletion } from "../hooks/use-subagent-completion"
 import type { KnowledgeSource } from "../../shared/knowledge"
-import { getKnowledgeSource, listAgents, mem9Recall } from "../services/backend"
+import {
+	getBrainContextSummary,
+	getKnowledgeSource,
+	listAgents,
+	listAllSkills,
+	mem9Recall,
+} from "../services/backend"
 import type { ManagedAgent } from "../../shared/agents"
 import { useMem9MemoryStorage } from "../hooks/use-mem9-memory"
 import { TeamRoster } from "./team-roster"
@@ -47,6 +53,7 @@ import type { AgentStatus } from "../lib/types"
 import { formatCost, formatTokens, formatWorkDuration } from "../lib/session-metrics"
 import { evaluateAgentWorkflowPolicy } from "../lib/agent-workflow-policy"
 import { DEFAULT_SUPERVISION_POLICY, evaluateSupervisionPolicy } from "../lib/supervision-policy"
+import { buildHiveSpawnPrompt } from "../lib/hive-spawn-prompt"
 
 const log = createLogger("multi-agent-panel")
 
@@ -266,46 +273,37 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				throw new Error(`Failed to create session for ${agentName}`)
 			}
 
-			// Build prompt: Mem9 recall + knowledge context + custom instruction
-			let promptParts: string[] = []
+			const [brainContext, skills] = await Promise.all([
+				getBrainContextSummary(dir, parentSessionId).catch(() => null),
+				listAllSkills().catch(() => []),
+			])
 
-			// 1. Mem9 semantic recall (if configured)
+			let memories: string | null = null
 			try {
 				const recallQuery = [agentName, customInstruction, agentName].filter(Boolean).join(" ")
-				const memories = await mem9Recall(recallQuery, 5)
-				if (memories) {
-					promptParts.push(memories)
-					promptParts.push("")
-				}
+				memories = await mem9Recall(recallQuery, 5)
 			} catch {
 				// Mem9 failure is non-blocking
 			}
 
-			// 2. If knowledge sources are selected, fetch them and add to the prompt
+			let knowledgeSections: Array<{ title: string; prompt: string }> = []
 			if (knowledgeFilenames && knowledgeFilenames.length > 0) {
 				const sources: (KnowledgeSource | null)[] = await Promise.all(
 					knowledgeFilenames.map((f) => getKnowledgeSource(f, dir)),
 				)
 				const validSources = sources.filter(Boolean) as KnowledgeSource[]
-				if (validSources.length > 0) {
-					promptParts.push("## Reference Knowledge", "")
-					for (const src of validSources) {
-						promptParts.push(`### ${src.title}`)
-						promptParts.push("")
-						promptParts.push(src.prompt)
-						promptParts.push("")
-					}
-				}
+				knowledgeSections = validSources.map((src) => ({ title: src.title, prompt: src.prompt }))
 			}
 
-			// 3. Custom instruction or fallback
-			if (customInstruction) {
-				promptParts.push(`## Task\n\n${customInstruction}`)
-			} else if (promptParts.length === 0) {
-				promptParts.push(`Begin your work as ${agentName}.`)
-			}
-
-			const prompt = promptParts.join("\n")
+			const prompt = buildHiveSpawnPrompt({
+				agentName,
+				agentDescription: _agentDescription,
+				customInstruction,
+				brainContext,
+				memories,
+				knowledgeSections,
+				skills,
+			})
 
 			// Pass model + agent name so the server uses the right config
 			const model = agentModel ? parseModelString(agentModel) : undefined

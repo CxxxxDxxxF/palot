@@ -122,9 +122,13 @@ async function brainList(): Promise<string[]> {
 }
 
 function safeBrainPath(slug: string): string {
-	const resolved = path.resolve(BRAIN_DIR, `${slug}.md`)
-	const brainRoot = path.resolve(BRAIN_DIR) + path.sep
-	if (!resolved.startsWith(brainRoot)) throw new Error(`Invalid slug: path escapes brain directory`)
+	const normalized = slug.trim().replace(/\.md$/i, "")
+	if (!/^[A-Za-z0-9_-]+$/.test(normalized)) throw new Error(`Invalid slug: ${slug}`)
+	const brainRoot = path.resolve(BRAIN_DIR)
+	const resolved = path.resolve(brainRoot, `${normalized}.md`)
+	if (resolved !== brainRoot && !resolved.startsWith(`${brainRoot}${path.sep}`)) {
+		throw new Error(`Invalid slug: path escapes brain directory`)
+	}
 	return resolved
 }
 

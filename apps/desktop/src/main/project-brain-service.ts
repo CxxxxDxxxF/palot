@@ -114,6 +114,15 @@ export class ProjectBrainService {
 		const issues = await this.readFile("issues")
 		if (issues) parts.push(`## issues\n${issues}`)
 
+		const models = await this.readFile("models")
+		if (models) parts.push(`## models\n${models.slice(0, 700)}`)
+
+		const skills = await this.readFile("skills")
+		if (skills) parts.push(`## skills\n${skills.slice(0, 500)}`)
+
+		const performance = await this.readFile("agent-performance")
+		if (performance) parts.push(`## agent-performance\n${performance.slice(0, 900)}`)
+
 		const combined = parts.join("\n\n")
 		return combined.slice(0, maxLength)
 	}
