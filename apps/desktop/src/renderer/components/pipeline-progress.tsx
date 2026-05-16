@@ -170,8 +170,6 @@ export function PipelineProgress({
 	parentTokens = 0,
 	knownAgents,
 }: PipelineProgressProps) {
-	if (children.length === 0) return null
-
 	// Build name → agent metadata lookup for team resolution
 	const agentByName = useMemo(() => {
 		if (!knownAgents) return new Map<string, ManagedAgent>()
@@ -253,6 +251,8 @@ export function PipelineProgress({
 
 		return [...teamMap.values()].sort((a, b) => b.running - a.running)
 	}, [children, agentByName])
+
+	if (children.length === 0) return null
 
 	return (
 		<div className="rounded-md border border-border/30 bg-muted/10 px-3 py-2.5">

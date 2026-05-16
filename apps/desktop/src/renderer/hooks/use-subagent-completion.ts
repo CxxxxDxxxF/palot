@@ -5,6 +5,8 @@ import { childSessionsFamily } from "../atoms/sub-agents"
 import { messagesFamily } from "../atoms/messages"
 import { partsFamily } from "../atoms/parts"
 import { appStore } from "../atoms/store"
+import { recordAgentPerformance } from "../services/backend"
+import type { ManagedAgent } from "../../shared/agents"
 import type { AgentStatus } from "../lib/types"
 
 /**
@@ -16,6 +18,7 @@ import type { AgentStatus } from "../lib/types"
 export function useSubAgentCompletion(
 	parentSessionId: string,
 	projectPath: string | undefined,
+	knownAgents: ManagedAgent[] = [],
 ): void {
 	const children = useAtomValue(childSessionsFamily(parentSessionId))
 	const appendOutput = useSetAtom(appendSubagentOutputAtom)
@@ -32,10 +35,10 @@ export function useSubAgentCompletion(
 			const prev = prevStatusRef.current.get(child.sessionId)
 			const curr = child.agentStatus
 
-			// Detect running → completed/idle transition
+			// Detect running → terminal transition
 			if (
 				prev === "running" &&
-				(curr === "completed" || curr === "idle") &&
+				(curr === "completed" || curr === "idle" || curr === "failed") &&
 				!recordedRef.current.has(child.sessionId)
 			) {
 				recordedRef.current.add(child.sessionId)
@@ -54,18 +57,46 @@ export function useSubAgentCompletion(
 					if (text) summary = text.slice(0, 500)
 				}
 
+				const completedAt = new Date()
+				const knownAgent = knownAgents.find((agent) => {
+					const name = agent.name.toLowerCase()
+					const filename = agent.filename.toLowerCase()
+					const childName = child.name.toLowerCase()
+					return name === childName || filename === childName.replace(/\s+/g, "-")
+				})
+
 				appendOutput({
 					projectPath,
 					output: {
 						sessionId: child.sessionId,
 						taskId: child.sessionId,
 						summary,
-						completedAt: new Date().toISOString(),
+						completedAt: completedAt.toISOString(),
 					},
 				})
+
+				recordAgentPerformance(projectPath, {
+					sessionId: child.sessionId,
+					parentSessionId,
+					agentName: child.name,
+					team: knownAgent?.team,
+					teamRole: knownAgent?.teamRole,
+					model: child.model,
+					status: curr === "failed" ? "failed" : "completed",
+					startedAt: new Date(completedAt.getTime() - child.durationMs).toISOString(),
+					completedAt: completedAt.toISOString(),
+					durationMs: child.durationMs,
+					costUsd: child.costRaw,
+					tokens: child.tokensRaw,
+					toolCallCount: child.toolCallCount,
+					errorCount: child.errorCount,
+					retryCount: child.retryCount,
+					summary,
+					failureReason: curr === "failed" ? child.errorMessage : null,
+				}).catch(() => {})
 			}
 
 			prevStatusRef.current.set(child.sessionId, curr)
 		}
-	}, [children, projectPath, appendOutput])
+	}, [children, projectPath, parentSessionId, knownAgents, appendOutput])
 }

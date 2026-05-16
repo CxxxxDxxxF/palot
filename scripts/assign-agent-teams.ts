@@ -308,7 +308,6 @@ async function main() {
 
 	const files = (await fs.readdir(AGENTS_DIR)).filter((f) => f.endsWith(".md"))
 	let updated = 0
-	let skipped = 0
 	const unassigned: string[] = []
 
 	for (const file of files) {
@@ -317,7 +316,6 @@ async function main() {
 
 		if (!assignment) {
 			unassigned.push(slug)
-			skipped++
 			continue
 		}
 
@@ -332,7 +330,7 @@ async function main() {
 		// For leaders: inject protocol if not already present
 		let newBody = body
 		if (assignment.role === "leader" && !body.includes("🏢 Team Leadership")) {
-			newBody = body.trimEnd() + "\n" + leadershipProtocol(assignment.teamDef) + "\n"
+			newBody = `${body.trimEnd()}\n${leadershipProtocol(assignment.teamDef)}\n`
 		}
 
 		await fs.writeFile(fullPath, rebuildFile(fm, newBody), "utf-8")

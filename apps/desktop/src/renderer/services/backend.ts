@@ -600,6 +600,25 @@ export async function getBrainContextSummary(projectPath: string, sessionId?: st
 }
 
 // ============================================================
+// Agent performance — Electron-only
+// ============================================================
+
+export async function listAgentPerformance(
+	projectPath?: string,
+): Promise<import("../../shared/agent-performance").AgentPerformanceLedger> {
+	if (isElectron) return window.palot.agentPerformance.list(projectPath)
+	throw new Error("Agent performance tracking is only available in Electron mode")
+}
+
+export async function recordAgentPerformance(
+	projectPath: string,
+	input: import("../../shared/agent-performance").AgentPerformanceInput,
+): Promise<import("../../shared/agent-performance").AgentPerformanceLedger> {
+	if (isElectron) return window.palot.agentPerformance.record(projectPath, input)
+	throw new Error("Agent performance tracking is only available in Electron mode")
+}
+
+// ============================================================
 // Model routing — Electron-only
 // ============================================================
 

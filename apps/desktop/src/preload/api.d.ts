@@ -635,6 +635,12 @@ export interface PalotAPI {
 		markTaskActive: (projectPath: string, taskId: string) => Promise<void>
 	}
 
+	// Agent performance
+	agentPerformance: {
+		list: (projectPath?: string) => Promise<import("../shared/agent-performance").AgentPerformanceLedger>
+		record: (projectPath: string, input: import("../shared/agent-performance").AgentPerformanceInput) => Promise<import("../shared/agent-performance").AgentPerformanceLedger>
+	}
+
 	// Semantic index
 	semantic: {
 		build: (projectPath: string) => Promise<import("../main/semantic-index-service").SemanticIndex>

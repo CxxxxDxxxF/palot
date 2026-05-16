@@ -143,22 +143,22 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const recoveryConfig = useAtomValue(recoveryConfigFamily(parentSessionId))
 	const setRecoveryConfig = useSetAtom(recoveryConfigFamily(parentSessionId))
 
-	// Feature 7: auto-record subagent completions to supervisor state
-	useSubAgentCompletion(parentSessionId, parentEntry?.directory)
-
-	// Mem9: auto-store subagent completions as persistent memories
-	useMem9MemoryStorage(parentSessionId, parentEntry?.directory)
-
-	// Auto-recovery loop for stalled/unresponsive child sessions
-	useAgentRecovery(parentSessionId, parentEntry?.directory ?? "")
-
-	// Load agent metadata for team-aware pipeline display
+	// Load agent metadata for team-aware pipeline display and performance records
 	const [knownAgents, setKnownAgents] = useState<ManagedAgent[]>([])
 	useEffect(() => {
 		listAgents(parentEntry?.directory ?? undefined)
 			.then(setKnownAgents)
 			.catch(() => {})
 	}, [parentEntry?.directory])
+
+	// Feature 7: auto-record subagent completions to supervisor state
+	useSubAgentCompletion(parentSessionId, parentEntry?.directory, knownAgents)
+
+	// Mem9: auto-store subagent completions as persistent memories
+	useMem9MemoryStorage(parentSessionId, parentEntry?.directory)
+
+	// Auto-recovery loop for stalled/unresponsive child sessions
+	useAgentRecovery(parentSessionId, parentEntry?.directory ?? "")
 
 	const isIdle = children.length === 0 && parentMetrics.tokensRaw === 0
 
@@ -189,12 +189,14 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							: "Idle",
 		model: parentMetrics.modelDistributionDisplay[0]?.name ?? null,
 		duration: parentMetrics.workTime,
+		durationMs: parentMetrics.workTimeMs,
 		costRaw: parentMetrics.costRaw,
 		cost: parentMetrics.cost,
 		tokensRaw: parentMetrics.tokensRaw,
 		tokens: parentMetrics.tokens,
 		toolCallCount: parentMetrics.toolCallCount,
 		errorCount: parentMetrics.errorCount,
+		retryCount: parentMetrics.retryCount,
 		errorMessage: parentEntry?.error?.name ?? null,
 		lastActivityAt: parentEntry
 			? Math.max(parentEntry.session.time.updated, parentEntry.session.time.created)

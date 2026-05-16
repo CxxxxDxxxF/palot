@@ -37,5 +37,6 @@ The Lead Agent reads the user request, outputs a PRE-FLIGHT REPORT, waits for co
 - [[decisions]] — prior engineering decisions
 - [[issues]] — known risks and blockers
 - [[models]] — model performance and cost notes
+- [[agent-performance]] — automatic agent run scores, timing, failures, and tuning signals
 - [[skills]] — skill usage history
 - [[run-history]] — agent run log

@@ -18,6 +18,7 @@ import { cn } from "@palot/ui/lib/utils"
 import {
 	BotIcon,
 	CrownIcon,
+	BarChart3Icon,
 	LayoutGridIcon,
 	ListIcon,
 	Loader2Icon,
@@ -27,9 +28,10 @@ import {
 	XIcon,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type { AgentPerformanceSummary } from "../../shared/agent-performance"
 import type { ManagedAgent } from "../../shared/agents"
 import { buildAgentRaw, filenameFromAgentName } from "../../shared/agents"
-import { deleteAgent, listAgents, writeAgent } from "../services/backend"
+import { deleteAgent, listAgentPerformance, listAgents, writeAgent } from "../services/backend"
 
 // ============================================================
 // Team metadata
@@ -175,9 +177,14 @@ function CreateAgentDialog({ open, onClose, onSaved }: CreateDialogProps) {
 // Agent detail panel (shared by both views)
 // ============================================================
 
-interface DetailPanelProps { agent: ManagedAgent; onDelete: () => void; onClose?: () => void }
+interface DetailPanelProps {
+	agent: ManagedAgent
+	performance?: AgentPerformanceSummary
+	onDelete: () => void
+	onClose?: () => void
+}
 
-function AgentDetailPanel({ agent, onDelete, onClose }: DetailPanelProps) {
+function AgentDetailPanel({ agent, performance, onDelete, onClose }: DetailPanelProps) {
 	const [confirmDelete, setConfirmDelete] = useState(false)
 	const teamMeta = agent.team ? TEAM_META[agent.team] : undefined
 
@@ -219,6 +226,15 @@ function AgentDetailPanel({ agent, onDelete, onClose }: DetailPanelProps) {
 				)}
 			</div>
 
+			{performance && (
+				<div className="grid grid-cols-4 gap-2 border-b border-border px-6 py-3">
+					<PerformanceCell label="Score" value={`${Math.round(performance.avgScore)}`} />
+					<PerformanceCell label="Success" value={`${Math.round(performance.successRate * 100)}%`} />
+					<PerformanceCell label="Runs" value={`${performance.runs}`} />
+					<PerformanceCell label="Time" value={`${Math.round(performance.totalDurationMs / 60000)}m`} />
+				</div>
+			)}
+
 			<div className="flex-1 overflow-y-auto px-6 py-4">
 				<h3 className="mb-2 text-sm font-medium text-muted-foreground">System Prompt</h3>
 				<pre className="min-h-[200px] whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-relaxed text-foreground">{agent.prompt || "(empty)"}</pre>
@@ -239,6 +255,18 @@ function AgentDetailPanel({ agent, onDelete, onClose }: DetailPanelProps) {
 					</Button>
 				)}
 			</div>
+		</div>
+	)
+}
+
+function PerformanceCell({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="rounded-md border border-border/40 bg-muted/15 px-2.5 py-2">
+			<div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">
+				<BarChart3Icon className="size-3" />
+				{label}
+			</div>
+			<div className="mt-1 text-sm font-semibold tabular-nums">{value}</div>
 		</div>
 	)
 }
@@ -424,12 +452,13 @@ function OrgChartView({ agents, onSelect }: OrgChartViewProps) {
 
 interface ListViewProps {
 	agents: ManagedAgent[]
+	performanceByAgent: Map<string, AgentPerformanceSummary>
 	selected: ManagedAgent | null
 	onSelect: (agent: ManagedAgent) => void
 	onDelete: (agent: ManagedAgent) => void
 }
 
-function ListView({ agents, selected, onSelect, onDelete }: ListViewProps) {
+function ListView({ agents, performanceByAgent, selected, onSelect, onDelete }: ListViewProps) {
 	const [query, setQuery] = useState("")
 	const filtered = useMemo(() => {
 		const q = query.toLowerCase()
@@ -477,7 +506,11 @@ function ListView({ agents, selected, onSelect, onDelete }: ListViewProps) {
 			{/* Detail */}
 			<div className="flex-1 overflow-hidden">
 				{selected ? (
-					<AgentDetailPanel agent={selected} onDelete={() => onDelete(selected)} />
+					<AgentDetailPanel
+						agent={selected}
+						performance={performanceByAgent.get(selected.name)}
+						onDelete={() => onDelete(selected)}
+					/>
 				) : (
 					<div className="flex h-full items-center justify-center">
 						<div className="text-center">
@@ -495,14 +528,24 @@ function ListView({ agents, selected, onSelect, onDelete }: ListViewProps) {
 // Agent inspect dialog (used from org chart click)
 // ============================================================
 
-interface InspectDialogProps { agent: ManagedAgent | null; onClose: () => void; onDelete: (agent: ManagedAgent) => void }
+interface InspectDialogProps {
+	agent: ManagedAgent | null
+	performanceByAgent: Map<string, AgentPerformanceSummary>
+	onClose: () => void
+	onDelete: (agent: ManagedAgent) => void
+}
 
-function InspectDialog({ agent, onClose, onDelete }: InspectDialogProps) {
+function InspectDialog({ agent, performanceByAgent, onClose, onDelete }: InspectDialogProps) {
 	if (!agent) return null
 	return (
 		<Dialog open={!!agent} onOpenChange={(v) => { if (!v) onClose() }}>
 			<DialogContent className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 p-0">
-				<AgentDetailPanel agent={agent} onDelete={() => { onDelete(agent); onClose() }} onClose={onClose} />
+				<AgentDetailPanel
+					agent={agent}
+					performance={performanceByAgent.get(agent.name)}
+					onDelete={() => { onDelete(agent); onClose() }}
+					onClose={onClose}
+				/>
 			</DialogContent>
 		</Dialog>
 	)
@@ -516,6 +559,7 @@ type ViewMode = "org" | "list"
 
 export function AgentsPage() {
 	const [agents, setAgents] = useState<ManagedAgent[]>([])
+	const [performanceByAgent, setPerformanceByAgent] = useState(new Map<string, AgentPerformanceSummary>())
 	const [viewMode, setViewMode] = useState<ViewMode>("org")
 	const [selected, setSelected] = useState<ManagedAgent | null>(null)
 	const [inspecting, setInspecting] = useState<ManagedAgent | null>(null)
@@ -525,7 +569,14 @@ export function AgentsPage() {
 
 	const loadAgents = useCallback(async () => {
 		setLoading(true); setError(null)
-		try { setAgents(await listAgents()) }
+		try {
+			const [agentList, performance] = await Promise.all([
+				listAgents(),
+				listAgentPerformance(),
+			])
+			setAgents(agentList)
+			setPerformanceByAgent(new Map(performance.agents.map((agent) => [agent.agentName, agent])))
+		}
 		catch (err) { setError(err instanceof Error ? err.message : "Failed to load agents.") }
 		finally { setLoading(false) }
 	}, [])
@@ -604,12 +655,23 @@ export function AgentsPage() {
 				</div>
 			) : (
 				<div className="flex-1 overflow-hidden">
-					<ListView agents={agents} selected={selected} onSelect={setSelected} onDelete={handleDelete} />
+					<ListView
+						agents={agents}
+						performanceByAgent={performanceByAgent}
+						selected={selected}
+						onSelect={setSelected}
+						onDelete={handleDelete}
+					/>
 				</div>
 			)}
 
 			{/* Org chart inspect dialog */}
-			<InspectDialog agent={inspecting} onClose={() => setInspecting(null)} onDelete={handleDelete} />
+			<InspectDialog
+				agent={inspecting}
+				performanceByAgent={performanceByAgent}
+				onClose={() => setInspecting(null)}
+				onDelete={handleDelete}
+			/>
 
 			{/* Create dialog */}
 			<CreateAgentDialog open={createOpen} onClose={() => setCreateOpen(false)} onSaved={loadAgents} />

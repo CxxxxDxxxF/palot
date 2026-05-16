@@ -60,6 +60,8 @@ import { routeTask, routePrompt } from "./model-routing-service"
 import { SemanticIndexService } from "./semantic-index-service"
 import { SupervisorStateService } from "./supervisor-state-service"
 import type { SubagentOutput } from "./supervisor-state-service"
+import { AgentPerformanceService } from "./agent-performance-service"
+import type { AgentPerformanceInput } from "../shared/agent-performance"
 import { getOpaqueWindows, getSettings, onSettingsChanged, updateSettings } from "./settings-store"
 import { AgentService, parseAgentDocument } from "./agent-service"
 import { KnowledgeService } from "./knowledge-service"
@@ -894,6 +896,16 @@ export function registerIpcHandlers(): void {
 
 	ipcMain.handle("supervisor:mark-task-active", withLogging("supervisor:mark-task-active", (_, projectPath: string, taskId: string) => {
 		return new SupervisorStateService(getBrainService(projectPath)).markTaskActive(taskId)
+	}))
+
+	// --- Agent Performance ---
+
+	ipcMain.handle("agent-performance:list", withLogging("agent-performance:list", (_, projectPath?: string) => {
+		return new AgentPerformanceService(getBrainService(projectPath)).load()
+	}))
+
+	ipcMain.handle("agent-performance:record", withLogging("agent-performance:record", (_, projectPath: string, input: AgentPerformanceInput) => {
+		return new AgentPerformanceService(getBrainService(projectPath)).record(input)
 	}))
 
 	// --- Knowledge graph ---

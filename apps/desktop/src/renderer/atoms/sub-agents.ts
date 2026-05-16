@@ -25,12 +25,14 @@ export interface SubAgentEntry {
 	activity: string | null
 	model: string | null
 	duration: string
+	durationMs: number
 	costRaw: number
 	cost: string
 	tokensRaw: number
 	tokens: string
 	toolCallCount: number
 	errorCount: number
+	retryCount: number
 	errorMessage: string | null
 	lastActivityAt: number
 	directory: string
@@ -129,12 +131,14 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 				activity,
 				model: metrics.modelDistributionDisplay[0]?.name ?? null,
 				duration: metrics.workTime,
+				durationMs: metrics.workTimeMs,
 				costRaw: metrics.costRaw,
 				cost: metrics.cost,
 				tokensRaw: metrics.tokensRaw,
 				tokens: metrics.tokens,
 				toolCallCount: metrics.toolCallCount,
 				errorCount: metrics.errorCount,
+				retryCount: metrics.retryCount,
 				errorMessage,
 				lastActivityAt: Math.max(recordedActivity, session.time.updated, session.time.created),
 				directory: entry.directory,
@@ -154,6 +158,7 @@ export const childSessionsFamily = atomFamily((parentSessionId: string) => {
 					n.tokensRaw === prev[i].tokensRaw &&
 					n.toolCallCount === prev[i].toolCallCount &&
 					n.errorCount === prev[i].errorCount &&
+					n.retryCount === prev[i].retryCount &&
 					n.errorMessage === prev[i].errorMessage &&
 					n.lastActivityAt === prev[i].lastActivityAt &&
 					n.directory === prev[i].directory,

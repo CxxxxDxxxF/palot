@@ -354,6 +354,13 @@ contextBridge.exposeInMainWorld("palot", {
 		markTaskActive: (projectPath: string, taskId: string) => ipcRenderer.invoke("supervisor:mark-task-active", projectPath, taskId),
 	},
 
+	// --- Agent performance ---
+
+	agentPerformance: {
+		list: (projectPath?: string) => ipcRenderer.invoke("agent-performance:list", projectPath),
+		record: (projectPath: string, input: unknown) => ipcRenderer.invoke("agent-performance:record", projectPath, input),
+	},
+
 	// --- Semantic index ---
 
 	semantic: {

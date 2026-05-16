@@ -242,11 +242,11 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<Te
 // ---------------------------------------------------------------------------
 
 function send(id: unknown, result: unknown): void {
-	process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n")
+	process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`)
 }
 
 function sendError(id: unknown, code: number, message: string): void {
-	process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n")
+	process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`)
 }
 
 let pending = 0
