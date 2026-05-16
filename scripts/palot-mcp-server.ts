@@ -320,21 +320,30 @@ function checkExit() {
 
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity })
 
-rl.on("line", async (line) => {
-	if (!line.trim()) return
+// isNotification is pre-computed synchronously so pending can be incremented
+// before the request enters the async queue (otherwise checkExit fires too early).
+async function handleLine(line: string, isNotification: boolean): Promise<void> {
+	if (!line.trim()) {
+		if (!isNotification) {
+			pending--
+			checkExit()
+		}
+		return
+	}
 
 	let msg: { jsonrpc: string; id: unknown; method: string; params?: unknown }
 	try {
 		msg = JSON.parse(line)
 	} catch {
 		sendError(null, -32700, "Parse error")
+		if (!isNotification) {
+			pending--
+			checkExit()
+		}
 		return
 	}
 
 	const { id, method, params } = msg
-	// Notifications (no id) are fire-and-forget — don't track as pending work
-	const isNotification = id === undefined || id === null
-	if (!isNotification) pending++
 
 	try {
 		switch (method) {
@@ -379,6 +388,23 @@ rl.on("line", async (line) => {
 			checkExit()
 		}
 	}
+}
+
+// Serialize all request handling so write→read sequences see consistent state.
+// pending is incremented synchronously here (before queuing) so checkExit()
+// called from rl "close" does not fire while requests are still queued.
+let requestQueue = Promise.resolve()
+rl.on("line", (line) => {
+	if (!line.trim()) return
+	let isNotification = true
+	try {
+		const parsed = JSON.parse(line) as { id?: unknown }
+		isNotification = parsed.id === undefined || parsed.id === null
+	} catch {
+		// handleLine will emit the parse error
+	}
+	if (!isNotification) pending++
+	requestQueue = requestQueue.then(() => handleLine(line, isNotification))
 })
 
 rl.on("close", () => {

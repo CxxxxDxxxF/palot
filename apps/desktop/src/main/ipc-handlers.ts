@@ -61,7 +61,12 @@ import { SemanticIndexService } from "./semantic-index-service"
 import { SupervisorStateService } from "./supervisor-state-service"
 import type { SubagentOutput } from "./supervisor-state-service"
 import { AgentPerformanceService } from "./agent-performance-service"
-import type { AgentPerformanceInput } from "../shared/agent-performance"
+import type { AgentPerformanceInput, AgentPerformanceLedger } from "../shared/agent-performance"
+
+// Serializes concurrent agent-performance:record writes per project path.
+// Without this, two agents completing simultaneously would both read the same
+// stale ledger and the second write would silently overwrite the first.
+const perfWriteQueues = new Map<string, Promise<AgentPerformanceLedger>>()
 import { getOpaqueWindows, getSettings, onSettingsChanged, updateSettings } from "./settings-store"
 import { AgentService, parseAgentDocument } from "./agent-service"
 import { KnowledgeService } from "./knowledge-service"
@@ -913,7 +918,10 @@ export function registerIpcHandlers(): void {
 	}))
 
 	ipcMain.handle("agent-performance:record", withLogging("agent-performance:record", (_, projectPath: string, input: AgentPerformanceInput) => {
-		return new AgentPerformanceService(getBrainService(projectPath)).record(input)
+		const prev = perfWriteQueues.get(projectPath) ?? Promise.resolve({} as AgentPerformanceLedger)
+		const next = prev.then(() => new AgentPerformanceService(getBrainService(projectPath)).record(input))
+		perfWriteQueues.set(projectPath, next.catch(() => ({}) as unknown as AgentPerformanceLedger))
+		return next
 	}))
 
 	// --- Knowledge graph ---

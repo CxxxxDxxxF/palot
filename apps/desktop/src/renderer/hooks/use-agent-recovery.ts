@@ -70,5 +70,5 @@ export function useAgentRecovery(parentSessionId: string, directory: string) {
 		runRecovery()
 
 		return () => clearInterval(id)
-	}, [parentSessionId, config.enabled, directory, abort, sendPrompt])
+	}, [parentSessionId, config, directory, abort, sendPrompt])
 }
