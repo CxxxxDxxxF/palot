@@ -52,7 +52,10 @@ function parseFrontmatter(content: string): { fm: Frontmatter; body: string } {
 		const colonIdx = line.indexOf(":")
 		if (colonIdx === -1) continue
 		const key = line.slice(0, colonIdx).trim()
-		const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "")
+		const value = line
+			.slice(colonIdx + 1)
+			.trim()
+			.replace(/^["']|["']$/g, "")
 		fm[key] = value
 	}
 
@@ -109,9 +112,7 @@ async function main() {
 			continue
 		}
 
-		const agentFiles = files.filter(
-			(f) => f.name.endsWith(".md") && f.name !== "README.md",
-		)
+		const agentFiles = files.filter((f) => f.name.endsWith(".md") && f.name !== "README.md")
 
 		for (const file of agentFiles) {
 			try {

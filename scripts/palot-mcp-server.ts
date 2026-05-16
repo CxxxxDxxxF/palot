@@ -39,7 +39,10 @@ const TOOLS = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				slug: { type: "string", description: "File slug without .md extension (e.g. 'tasks', 'decisions')" },
+				slug: {
+					type: "string",
+					description: "File slug without .md extension (e.g. 'tasks', 'decisions')",
+				},
 			},
 			required: ["slug"],
 		},
@@ -51,7 +54,10 @@ const TOOLS = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				slug: { type: "string", description: "File slug without .md (e.g. 'tasks', 'run-history')" },
+				slug: {
+					type: "string",
+					description: "File slug without .md (e.g. 'tasks', 'run-history')",
+				},
 				content: { type: "string", description: "Full markdown content to write" },
 			},
 			required: ["slug", "content"],
@@ -59,7 +65,8 @@ const TOOLS = [
 	},
 	{
 		name: "brain_search",
-		description: "Keyword search across all shared brain files. Returns matching slugs with excerpts.",
+		description:
+			"Keyword search across all shared brain files. Returns matching slugs with excerpts.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -76,7 +83,11 @@ const TOOLS = [
 			type: "object",
 			properties: {
 				content: { type: "string", description: "Memory content to store" },
-				tags: { type: "array", items: { type: "string" }, description: "Optional classification tags" },
+				tags: {
+					type: "array",
+					items: { type: "string" },
+					description: "Optional classification tags",
+				},
 				source: { type: "string", description: "Source agent or context identifier" },
 			},
 			required: ["content"],
@@ -150,9 +161,7 @@ async function brainSearch(keyword: string): Promise<Array<{ slug: string; excer
 		results.push({ slug, excerpt, count })
 	}
 
-	return results
-		.sort((a, b) => b.count - a.count)
-		.map(({ slug, excerpt }) => ({ slug, excerpt }))
+	return results.sort((a, b) => b.count - a.count).map(({ slug, excerpt }) => ({ slug, excerpt }))
 }
 
 // ---------------------------------------------------------------------------

@@ -37,7 +37,8 @@ import { createLogger } from "../lib/logger"
 import { useAgentRecovery } from "../hooks/use-agent-recovery"
 import { useSubAgentCompletion } from "../hooks/use-subagent-completion"
 import type { KnowledgeSource } from "../../shared/knowledge"
-import { getKnowledgeSource, mem9Recall } from "../services/backend"
+import { getKnowledgeSource, listAgents, mem9Recall } from "../services/backend"
+import type { ManagedAgent } from "../../shared/agents"
 import { useMem9MemoryStorage } from "../hooks/use-mem9-memory"
 import { TeamRoster } from "./team-roster"
 import { recoveryConfigFamily, recoveryStateFamily } from "../atoms/session-heartbeats"
@@ -150,6 +151,14 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 
 	// Auto-recovery loop for stalled/unresponsive child sessions
 	useAgentRecovery(parentSessionId, parentEntry?.directory ?? "")
+
+	// Load agent metadata for team-aware pipeline display
+	const [knownAgents, setKnownAgents] = useState<ManagedAgent[]>([])
+	useEffect(() => {
+		listAgents(parentEntry?.directory ?? undefined)
+			.then(setKnownAgents)
+			.catch(() => {})
+	}, [parentEntry?.directory])
 
 	const isIdle = children.length === 0 && parentMetrics.tokensRaw === 0
 
@@ -376,6 +385,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 						}
 						parentCost={parentMetrics.costRaw}
 						parentTokens={parentMetrics.tokensRaw}
+						knownAgents={knownAgents}
 					/>
 
 					{/* Child sub-agent rows */}

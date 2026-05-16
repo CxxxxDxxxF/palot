@@ -29,6 +29,10 @@ export interface ManagedAgent {
 	prompt: string
 	/** Origin of this agent definition */
 	origin: "user" | "project" | "builtin"
+	/** Team this agent belongs to (e.g. "engineering", "infrastructure") */
+	team?: string
+	/** Role within the team */
+	teamRole?: "leader" | "member"
 }
 
 /** Input for creating or updating an agent file. */

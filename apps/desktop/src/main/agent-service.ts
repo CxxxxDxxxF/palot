@@ -30,6 +30,7 @@ export function parseAgentDocument(raw: string, filename: string): ManagedAgent 
 
 	const [, frontmatter, body] = match
 	const modeRaw = readFrontmatterValue(frontmatter, "mode") || "subagent"
+	const teamRoleRaw = readFrontmatterValue(frontmatter, "team-role")
 
 	return {
 		filename: basename,
@@ -41,6 +42,8 @@ export function parseAgentDocument(raw: string, filename: string): ManagedAgent 
 		raw,
 		prompt: body.trim(),
 		origin: "user",
+		team: readFrontmatterValue(frontmatter, "team") || undefined,
+		teamRole: teamRoleRaw === "leader" ? "leader" : teamRoleRaw === "member" ? "member" : undefined,
 	}
 }
 
