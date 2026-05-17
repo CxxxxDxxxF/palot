@@ -112,7 +112,7 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 	const handleSpawn = useCallback(async () => {
 		setSpawning(true); setError(null)
 		try {
-			const skillsToPass = skills.length > 0 ? selectedSkills : undefined
+			const skillsToPass = skills.length > 0 && selectedSkills.length > 0 ? selectedSkills : undefined
 			await onSpawn(agent.name, customInstruction, selectedKnowledge.length > 0 ? selectedKnowledge : undefined, skillsToPass)
 			onClose()
 		} catch (err) {
