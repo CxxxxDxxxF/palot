@@ -112,9 +112,12 @@ describe("parseSpawnRequestsFromText", () => {
 		const requests = parseSpawnRequestsFromText(text)
 		expect(requests).toHaveLength(2)
 		expect(requests[0].agent).toBe("react-specialist")
-		expect(requests[0].reason).toBe("Fix the scroll bug")
+		expect(requests[0].task).toBe("Fix the scroll bug")
+		expect(requests[0].reason).toBe("UI work")
 		expect(requests[0].status).toBe("pending")
 		expect(requests[1].agent).toBe("code-reviewer")
+		expect(requests[1].task).toBe("Review the fix")
+		// no reason field → falls back to task value
 		expect(requests[1].reason).toBe("Review the fix")
 	})
 
@@ -138,13 +141,14 @@ describe("parseSpawnRequestsFromText", () => {
 		expect(parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)).toEqual([])
 	})
 
-	test("uses task field preferring it over reason", () => {
+	test("separates task (what to do) from reason (why this agent)", () => {
 		const block = JSON.stringify({
 			type: "palot.spawn_request",
-			agents: [{ name: "architect", task: "Design auth flow", reason: "ignored" }],
+			agents: [{ name: "architect", task: "Design auth flow", reason: "Architecture work" }],
 		})
 		const requests = parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)
-		expect(requests[0].reason).toBe("Design auth flow")
+		expect(requests[0].task).toBe("Design auth flow")
+		expect(requests[0].reason).toBe("Architecture work")
 	})
 
 	test("returns empty string for null input", () => {

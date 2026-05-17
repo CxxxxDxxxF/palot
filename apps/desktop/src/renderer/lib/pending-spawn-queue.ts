@@ -29,6 +29,9 @@ export interface SpawnRequest {
 	/** Unique identifier: "<agent>:<requestedAt>" */
 	id: string
 	agent: string
+	/** What this agent will work on — used as customInstruction when spawning */
+	task: string
+	/** Why this agent was selected — shown to the user in the pending-spawn UI */
 	reason: string
 	status: "pending" | "approved" | "rejected"
 	requestedAt: string
@@ -53,7 +56,7 @@ export function parseSpawnRequests(content: string | null): SpawnRequest[] {
 		const reason = reasonMatch?.[1]?.trim() ?? ""
 		const status = (statusMatch?.[1]?.trim() ?? "pending") as SpawnRequest["status"]
 
-		requests.push({ id: `${agent}:${requestedAt.trim()}`, agent, reason, status, requestedAt: requestedAt.trim() })
+		requests.push({ id: `${agent}:${requestedAt.trim()}`, agent, task: reason, reason, status, requestedAt: requestedAt.trim() })
 	}
 
 	return requests
@@ -137,9 +140,10 @@ export function parseSpawnRequestsFromText(text: string): SpawnRequest[] {
 		const ts = new Date().toISOString()
 		for (const agent of (block as JsonSpawnBlock).agents) {
 			if (!agent.name) continue
-			const reason = agent.task ?? agent.reason ?? ""
+			const task = agent.task ?? agent.reason ?? ""
+			const reason = agent.reason ?? agent.task ?? ""
 			const id = `msg:${agent.name}:${ts}`
-			requests.push({ id, agent: agent.name, reason, status: "pending", requestedAt: ts })
+			requests.push({ id, agent: agent.name, task, reason, status: "pending", requestedAt: ts })
 		}
 	}
 

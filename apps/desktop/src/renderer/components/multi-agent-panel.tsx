@@ -230,7 +230,10 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 		if (newRequests.length > 0) {
 			setMessageSpawns((prev) => [...prev, ...newRequests])
 		}
-	}, [leadMessages, parentSessionId])
+	// Also re-run when the lead session finishes responding — parts are populated
+	// during streaming but leadMessages only changes when a message is added, not
+	// when parts update. Watching status.type catches the streaming-complete event.
+	}, [leadMessages, parentSessionId, parentEntry?.status.type])
 
 	// Merge both sources; filter out already-approved requests; deduplicate by agent name
 	const allPendingSpawns = useMemo(() => {
@@ -452,7 +455,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				agent?.description ?? "",
 				agent?.model ?? "",
 				agent?.prompt ?? "",
-				request.reason,
+				request.task || request.reason,
 			)
 			// Track as approved so it disappears from the queue immediately
 			approvedIdsRef.current.add(request.id)
@@ -734,7 +737,12 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 									<div key={req.id} className="flex items-start justify-between gap-2">
 										<div className="min-w-0">
 											<p className="truncate font-medium text-foreground/80">{req.agent}</p>
-											<p className="truncate text-muted-foreground/60">{req.reason}</p>
+											{req.reason && req.reason !== req.task && (
+												<p className="truncate text-[9px] text-muted-foreground/50 uppercase tracking-wide">{req.reason}</p>
+											)}
+											{req.task && (
+												<p className="truncate text-muted-foreground/60">{req.task}</p>
+											)}
 										</div>
 										<button
 											type="button"
