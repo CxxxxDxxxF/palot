@@ -39,6 +39,21 @@ describe("buildHiveSpawnPrompt", () => {
 		expect(prompt).toContain("Fix the Brain page render state.")
 	})
 
+	test("includes mandatory HANDOFF_READY brain-write instruction", () => {
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "react-specialist",
+			agentDescription: "React expert",
+			customInstruction: "Fix the scroll bug.",
+		})
+
+		expect(prompt).toContain("HANDOFF_READY")
+		expect(prompt).toContain("brain_append run-history")
+		expect(prompt).toContain("Status: complete | blocked | failed")
+		expect(prompt).toContain("Summary:")
+		expect(prompt).toContain("Files:")
+		expect(prompt).toContain("Blockers:")
+	})
+
 	test("falls back to a useful task when no custom instruction is provided", () => {
 		const prompt = buildHiveSpawnPrompt({
 			agentName: "qa-expert",

@@ -230,7 +230,18 @@ Skip in EMERGENCY mode if Builder output is clean.
 
 ---
 
-### Step 6 — FINAL REPORT
+### Step 6 — Synthesize Sub-Agent Results
+
+Before writing the FINAL REPORT, collect all handoffs:
+
+1. `brain_read run-history` — look for `## HANDOFF_READY:` sections from each agent
+2. For each HANDOFF: read Status, Summary, Files, and Blockers
+3. If any agent shows `Status: blocked` or `Status: failed`, spawn a repair Builder before continuing
+4. If a handoff is missing after 60 s, prompt the agent: "Write your HANDOFF_READY note to brain run-history now."
+
+---
+
+### Step 7 — FINAL REPORT
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
