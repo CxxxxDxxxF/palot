@@ -1,13 +1,28 @@
 /**
- * Pending-spawn queue — parses structured spawn requests the Lead Agent
- * writes to brain/spawn-requests.md and provides helpers to update them.
+ * Pending-spawn queue — two detection modes:
  *
- * Format the Lead Agent should write (via brain_append):
+ * 1. JSON message blocks (primary) — Lead Agent emits a structured JSON block
+ *    in its chat output. Palot detects it in real-time without requiring any
+ *    MCP tool call to succeed.
  *
- * ## REQUEST:agent-name:ISO-timestamp
- * - **Agent**: agent-name
- * - **Reason**: one-line reason
- * - **Status**: pending
+ *    Format:
+ *    ```json
+ *    {
+ *      "type": "palot.spawn_request",
+ *      "agents": [
+ *        { "name": "react-specialist", "task": "Fix the scroll bug", "reason": "UI work" }
+ *      ]
+ *    }
+ *    ```
+ *
+ * 2. Brain file (backup) — Lead Agent writes `brain_append "spawn-requests"`.
+ *    Polled every 10 s. Useful when the Lead Agent uses MCP tools.
+ *
+ *    Format:
+ *    ## REQUEST:agent-name:ISO-timestamp
+ *    - **Agent**: agent-name
+ *    - **Reason**: one-line reason
+ *    - **Status**: pending
  */
 
 export interface SpawnRequest {
@@ -77,4 +92,59 @@ export function buildSpawnRequestMarkdown(agent: string, reason: string): string
 		`- **Status**: pending`,
 		"",
 	].join("\n")
+}
+
+// ============================================================
+// JSON message block parser (primary detection path)
+// ============================================================
+
+interface JsonSpawnAgent {
+	name: string
+	task?: string
+	reason?: string
+}
+
+interface JsonSpawnBlock {
+	type: "palot.spawn_request"
+	agents: JsonSpawnAgent[]
+}
+
+/**
+ * Extract spawn requests embedded in Lead Agent text output.
+ *
+ * Searches for ```json ... ``` fences that contain a `palot.spawn_request`
+ * block. Returns one SpawnRequest per agent entry.
+ */
+export function parseSpawnRequestsFromText(text: string): SpawnRequest[] {
+	if (!text) return []
+	const requests: SpawnRequest[] = []
+	// Match ```json ... ``` and ``` ... ``` (no language tag)
+	const FENCE_RE = /```(?:json)?\s*([\s\S]*?)\s*```/g
+	let match: RegExpExecArray | null
+
+	while ((match = FENCE_RE.exec(text)) !== null) {
+		let block: unknown
+		try {
+			block = JSON.parse(match[1])
+		} catch {
+			continue
+		}
+		if (
+			typeof block !== "object" ||
+			block === null ||
+			(block as JsonSpawnBlock).type !== "palot.spawn_request" ||
+			!Array.isArray((block as JsonSpawnBlock).agents)
+		) {
+			continue
+		}
+		const ts = new Date().toISOString()
+		for (const agent of (block as JsonSpawnBlock).agents) {
+			if (!agent.name) continue
+			const reason = agent.task ?? agent.reason ?? ""
+			const id = `msg:${agent.name}:${ts}`
+			requests.push({ id, agent: agent.name, reason, status: "pending", requestedAt: ts })
+		}
+	}
+
+	return requests
 }

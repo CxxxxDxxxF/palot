@@ -20,9 +20,12 @@ import {
 	ZapIcon,
 } from "lucide-react"
 import type React from "react"
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { SubAgentEntry } from "../atoms/sub-agents"
 import { childSessionsFamily } from "../atoms/sub-agents"
+import { messagesFamily } from "../atoms/messages"
+import { partsFamily } from "../atoms/parts"
+import { appStore } from "../atoms/store"
 import { sessionMetricsFamily } from "../atoms/derived/session-metrics"
 import { sessionFamily } from "../atoms/sessions"
 import { useAgentActions } from "../hooks/use-server"
@@ -49,7 +52,7 @@ import {
 	readBrainFile,
 	writeBrainFile,
 } from "../services/backend"
-import { markRequestApproved, parseSpawnRequests, pendingRequests } from "../lib/pending-spawn-queue"
+import { markRequestApproved, parseSpawnRequests, parseSpawnRequestsFromText, pendingRequests } from "../lib/pending-spawn-queue"
 import type { SpawnRequest } from "../lib/pending-spawn-queue"
 import type { ManagedAgent } from "../../shared/agents"
 import { useMem9MemoryStorage } from "../hooks/use-mem9-memory"
@@ -184,8 +187,8 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	// Auto-recovery loop for stalled/unresponsive child sessions
 	useAgentRecovery(parentSessionId, parentEntry?.directory ?? "")
 
-	// Pending spawn queue — poll brain/spawn-requests.md for Lead Agent spawn requests
-	const [pendingSpawns, setPendingSpawns] = useState<SpawnRequest[]>([])
+	// Pending spawn queue — poll brain/spawn-requests.md for Lead Agent spawn requests (backup path)
+	const [brainSpawns, setBrainSpawns] = useState<SpawnRequest[]>([])
 	useEffect(() => {
 		const dir = parentEntry?.directory
 		if (!dir) return
@@ -193,13 +196,55 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 		const poll = () => {
 			readBrainFile("spawn-requests", dir).then((content) => {
 				if (!mounted) return
-				setPendingSpawns(pendingRequests(parseSpawnRequests(content)))
+				setBrainSpawns(pendingRequests(parseSpawnRequests(content)))
 			}).catch(() => {})
 		}
 		poll()
 		const id = setInterval(poll, 10_000)
 		return () => { mounted = false; clearInterval(id) }
 	}, [parentEntry?.directory])
+
+	// Message-based spawn detection (primary path) — watches Lead Agent output in real time
+	const leadMessages = useAtomValue(messagesFamily(parentSessionId))
+	const [messageSpawns, setMessageSpawns] = useState<SpawnRequest[]>([])
+	const seenBlockKeysRef = useRef(new Set<string>())
+	const approvedIdsRef = useRef(new Set<string>())
+
+	useEffect(() => {
+		const newRequests: SpawnRequest[] = []
+		for (const msg of leadMessages) {
+			if (msg.role !== "assistant") continue
+			const parts = appStore.get(partsFamily(msg.id))
+			for (const part of parts) {
+				if (part.type !== "text" || !("text" in part)) continue
+				const parsed = parseSpawnRequestsFromText((part as { type: "text"; text: string }).text)
+				for (const req of parsed) {
+					// Deduplicate by agent+reason key so re-renders don't add duplicates
+					const key = `${req.agent}::${req.reason}`
+					if (seenBlockKeysRef.current.has(key)) continue
+					seenBlockKeysRef.current.add(key)
+					newRequests.push(req)
+				}
+			}
+		}
+		if (newRequests.length > 0) {
+			setMessageSpawns((prev) => [...prev, ...newRequests])
+		}
+	}, [leadMessages, parentSessionId])
+
+	// Merge both sources; filter out already-approved requests; deduplicate by agent name
+	const allPendingSpawns = useMemo(() => {
+		const combined = [
+			...messageSpawns.filter((r) => !approvedIdsRef.current.has(r.id)),
+			...brainSpawns,
+		]
+		const seen = new Set<string>()
+		return combined.filter((r) => {
+			if (seen.has(r.agent)) return false
+			seen.add(r.agent)
+			return true
+		})
+	}, [messageSpawns, brainSpawns])
 
 	const isIdle = children.length === 0 && parentMetrics.tokensRaw === 0
 
@@ -408,12 +453,18 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				agent?.prompt ?? "",
 				request.reason,
 			)
-			// Mark approved in brain
-			const content = await readBrainFile("spawn-requests", dir)
-			if (content) {
-				await writeBrainFile("spawn-requests", markRequestApproved(content, request.id), dir)
+			// Track as approved so it disappears from the queue immediately
+			approvedIdsRef.current.add(request.id)
+			// Also update brain file if this was a brain-file request
+			if (!request.id.startsWith("msg:")) {
+				const content = await readBrainFile("spawn-requests", dir)
+				if (content) {
+					await writeBrainFile("spawn-requests", markRequestApproved(content, request.id), dir)
+				}
+				setBrainSpawns((prev) => prev.filter((r) => r.id !== request.id))
+			} else {
+				setMessageSpawns((prev) => prev.filter((r) => r.id !== request.id))
 			}
-			setPendingSpawns((prev) => prev.filter((r) => r.id !== request.id))
 		} catch (err) {
 			log.error("Failed to approve spawn request", { agent: request.agent }, err)
 		}
@@ -660,14 +711,25 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				</>
 			)}
 					{/* Pending spawn requests from the Lead Agent */}
-					{pendingSpawns.length > 0 && (
+					{allPendingSpawns.length > 0 && (
 						<div className="rounded-md border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px]">
-							<div className="mb-1.5 flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300/80">
-								<InboxIcon className="size-3" aria-hidden="true" />
-								Requested Agents ({pendingSpawns.length})
+							<div className="mb-1.5 flex items-center justify-between gap-2">
+								<div className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300/80">
+									<InboxIcon className="size-3" aria-hidden="true" />
+									Requested Agents ({allPendingSpawns.length})
+								</div>
+								{allPendingSpawns.length > 1 && (
+									<button
+										type="button"
+										onClick={() => { for (const req of allPendingSpawns) handleApproveSpawn(req) }}
+										className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300 transition-colors hover:bg-amber-400/20"
+									>
+										Approve All
+									</button>
+								)}
 							</div>
 							<div className="space-y-1.5">
-								{pendingSpawns.map((req) => (
+								{allPendingSpawns.map((req) => (
 									<div key={req.id} className="flex items-start justify-between gap-2">
 										<div className="min-w-0">
 											<p className="truncate font-medium text-foreground/80">{req.agent}</p>

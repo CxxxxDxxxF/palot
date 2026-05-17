@@ -3,6 +3,7 @@ import {
 	buildSpawnRequestMarkdown,
 	markRequestApproved,
 	parseSpawnRequests,
+	parseSpawnRequestsFromText,
 	pendingRequests,
 } from "./pending-spawn-queue"
 
@@ -94,6 +95,60 @@ describe("markRequestApproved", () => {
 	test("leaves content unchanged for unknown id", () => {
 		const updated = markRequestApproved(SAMPLE, "nonexistent:2026-01-01T00:00:00.000Z")
 		expect(updated).toBe(SAMPLE)
+	})
+})
+
+describe("parseSpawnRequestsFromText", () => {
+	const BLOCK = JSON.stringify({
+		type: "palot.spawn_request",
+		agents: [
+			{ name: "react-specialist", task: "Fix the scroll bug", reason: "UI work" },
+			{ name: "code-reviewer", task: "Review the fix" },
+		],
+	}, null, 2)
+
+	test("extracts agents from ```json fenced block", () => {
+		const text = `Here is my plan:\n\`\`\`json\n${BLOCK}\n\`\`\``
+		const requests = parseSpawnRequestsFromText(text)
+		expect(requests).toHaveLength(2)
+		expect(requests[0].agent).toBe("react-specialist")
+		expect(requests[0].reason).toBe("Fix the scroll bug")
+		expect(requests[0].status).toBe("pending")
+		expect(requests[1].agent).toBe("code-reviewer")
+		expect(requests[1].reason).toBe("Review the fix")
+	})
+
+	test("extracts from unfenced ``` block (no language tag)", () => {
+		const text = `\`\`\`\n${BLOCK}\n\`\`\``
+		const requests = parseSpawnRequestsFromText(text)
+		expect(requests).toHaveLength(2)
+	})
+
+	test("returns empty for text with no JSON fences", () => {
+		expect(parseSpawnRequestsFromText("Just a regular message.")).toEqual([])
+	})
+
+	test("returns empty for JSON fence that is not a spawn block", () => {
+		const text = "```json\n{\"type\": \"other.type\", \"data\": []}\n```"
+		expect(parseSpawnRequestsFromText(text)).toEqual([])
+	})
+
+	test("skips agents with no name", () => {
+		const block = JSON.stringify({ type: "palot.spawn_request", agents: [{ task: "no name here" }] })
+		expect(parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)).toEqual([])
+	})
+
+	test("uses task field preferring it over reason", () => {
+		const block = JSON.stringify({
+			type: "palot.spawn_request",
+			agents: [{ name: "architect", task: "Design auth flow", reason: "ignored" }],
+		})
+		const requests = parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)
+		expect(requests[0].reason).toBe("Design auth flow")
+	})
+
+	test("returns empty string for null input", () => {
+		expect(parseSpawnRequestsFromText("")).toEqual([])
 	})
 })
 
