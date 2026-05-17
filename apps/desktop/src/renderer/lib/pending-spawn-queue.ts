@@ -37,6 +37,44 @@ export interface SpawnRequest {
 	requestedAt: string
 }
 
+export interface SpawnTeamTemplate {
+	name: string
+	agents: string[]
+}
+
+interface JsonSpawnTeam {
+	name: string
+	task?: string
+	reason?: string
+}
+
+export const SPAWN_TEAM_TEMPLATES: Record<string, SpawnTeamTemplate> = {
+	"frontend-team": {
+		name: "Frontend Team",
+		agents: ["react-specialist", "typescript-pro", "code-reviewer"],
+	},
+	"backend-team": {
+		name: "Backend Team",
+		agents: ["typescript-pro", "api-designer", "code-reviewer"],
+	},
+	"infrastructure-team": {
+		name: "Infrastructure Team",
+		agents: ["devops-engineer", "security-auditor"],
+	},
+	"architecture-team": {
+		name: "Architecture Team",
+		agents: ["architect-reviewer", "code-reviewer"],
+	},
+	"research-team": {
+		name: "Research Team",
+		agents: ["research-analyst", "knowledge-synthesizer"],
+	},
+	"full-build-team": {
+		name: "Full Build Team",
+		agents: ["architect-reviewer", "fullstack-developer", "code-reviewer"],
+	},
+}
+
 /** Parse all spawn requests from the brain slug content. */
 export function parseSpawnRequests(content: string | null): SpawnRequest[] {
 	if (!content) return []
@@ -106,7 +144,8 @@ interface JsonSpawnAgent {
 
 interface JsonSpawnBlock {
 	type: "palot.spawn_request"
-	agents: JsonSpawnAgent[]
+	agents?: JsonSpawnAgent[]
+	teams?: JsonSpawnTeam[]
 }
 
 /**
@@ -133,12 +172,30 @@ export function parseSpawnRequestsFromText(text: string): SpawnRequest[] {
 			typeof block !== "object" ||
 			block === null ||
 			(block as JsonSpawnBlock).type !== "palot.spawn_request" ||
-			!Array.isArray((block as JsonSpawnBlock).agents)
+			(!Array.isArray((block as JsonSpawnBlock).agents) &&
+				!Array.isArray((block as JsonSpawnBlock).teams))
 		) {
 			continue
 		}
 		const ts = new Date().toISOString()
-		for (const agent of (block as JsonSpawnBlock).agents) {
+		for (const team of (block as JsonSpawnBlock).teams ?? []) {
+			const template = SPAWN_TEAM_TEMPLATES[team.name]
+			if (!template) continue
+			const task = team.task ?? team.reason ?? ""
+			const reason = team.reason ?? template.name
+			for (const agentName of template.agents) {
+				const id = `msg:${team.name}:${agentName}:${ts}`
+				requests.push({
+					id,
+					agent: agentName,
+					task,
+					reason,
+					status: "pending",
+					requestedAt: ts,
+				})
+			}
+		}
+		for (const agent of (block as JsonSpawnBlock).agents ?? []) {
 			if (!agent.name) continue
 			const task = agent.task ?? agent.reason ?? ""
 			const reason = agent.reason ?? agent.task ?? ""

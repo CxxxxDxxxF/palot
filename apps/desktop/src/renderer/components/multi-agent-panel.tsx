@@ -27,6 +27,7 @@ import { messagesFamily } from "../atoms/messages"
 import { partsFamily } from "../atoms/parts"
 import { appStore } from "../atoms/store"
 import { sessionMetricsFamily } from "../atoms/derived/session-metrics"
+import { contextCompactionActionFamily } from "../atoms/context-compaction"
 import { sessionFamily } from "../atoms/sessions"
 import { useAgentActions } from "../hooks/use-server"
 import {
@@ -158,6 +159,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const children = useAtomValue(childSessionsFamily(parentSessionId))
 	const parentEntry = useAtomValue(sessionFamily(parentSessionId))
 	const parentMetrics = useAtomValue(sessionMetricsFamily(parentSessionId))
+	const compactionAction = useAtomValue(contextCompactionActionFamily(parentSessionId))
 	const recentEvents = useAtomValue(supervisionEventsForWorkflowFamily(parentSessionId))
 	const now = useHeartbeatNow()
 	const { abort, sendPrompt, createSession } = useAgentActions()
@@ -177,6 +179,15 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				})
 			})
 	}, [parentEntry?.directory])
+
+	const knownAgentKeys = useMemo(() => {
+		const keys = new Set<string>()
+		for (const agent of knownAgents) {
+			keys.add(agent.filename.toLowerCase())
+			keys.add(agent.name.toLowerCase())
+		}
+		return keys
+	}, [knownAgents])
 
 	// Feature 7: auto-record subagent completions to supervisor state
 	useSubAgentCompletion(parentSessionId, parentEntry?.directory, knownAgents)
@@ -248,6 +259,16 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 			return true
 		})
 	}, [messageSpawns, brainSpawns])
+
+	const validPendingSpawns = useMemo(() => {
+		if (knownAgentKeys.size === 0) return allPendingSpawns
+		return allPendingSpawns.filter((request) => knownAgentKeys.has(request.agent.toLowerCase()))
+	}, [allPendingSpawns, knownAgentKeys])
+
+	const invalidPendingSpawns = useMemo(() => {
+		if (knownAgentKeys.size === 0) return []
+		return allPendingSpawns.filter((request) => !knownAgentKeys.has(request.agent.toLowerCase()))
+	}, [allPendingSpawns, knownAgentKeys])
 
 	const isIdle = children.length === 0 && parentMetrics.tokensRaw === 0
 
@@ -447,14 +468,18 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 		const dir = parentEntry?.directory
 		if (!dir) return
 		const agent = knownAgents.find((a) => a.filename === request.agent || a.name.toLowerCase() === request.agent.toLowerCase())
+		if (!agent) {
+			log.warn("Ignoring spawn request for unknown agent", { agent: request.agent })
+			return
+		}
 		try {
 			await handleSpawn(
 				dir,
 				parentSessionId,
-				agent?.name ?? request.agent,
-				agent?.description ?? "",
-				agent?.model ?? "",
-				agent?.prompt ?? "",
+				agent.name,
+				agent.description,
+				agent.model,
+				agent.prompt,
 				request.task || request.reason,
 			)
 			// Track as approved so it disappears from the queue immediately
@@ -715,17 +740,17 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 				</>
 			)}
 					{/* Pending spawn requests from the Lead Agent */}
-					{allPendingSpawns.length > 0 && (
+					{validPendingSpawns.length > 0 && (
 						<div className="rounded-md border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px]">
 							<div className="mb-1.5 flex items-center justify-between gap-2">
 								<div className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300/80">
 									<InboxIcon className="size-3" aria-hidden="true" />
-									Requested Agents ({allPendingSpawns.length})
+									Requested Agents ({validPendingSpawns.length})
 								</div>
-								{allPendingSpawns.length > 1 && (
+								{validPendingSpawns.length > 1 && (
 									<button
 										type="button"
-										onClick={async () => { for (const req of allPendingSpawns) await handleApproveSpawn(req) }}
+										onClick={async () => { for (const req of validPendingSpawns) await handleApproveSpawn(req) }}
 										className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300 transition-colors hover:bg-amber-400/20"
 									>
 										Approve All
@@ -733,7 +758,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 								)}
 							</div>
 							<div className="space-y-1.5">
-								{allPendingSpawns.map((req) => (
+								{validPendingSpawns.map((req) => (
 									<div key={req.id} className="flex items-start justify-between gap-2">
 										<div className="min-w-0">
 											<p className="truncate font-medium text-foreground/80">{req.agent}</p>
@@ -756,6 +781,35 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							</div>
 						</div>
 					)}
+					{invalidPendingSpawns.length > 0 && (
+						<div className="rounded-md border border-red-400/20 bg-red-400/5 px-2.5 py-2 text-[10px]">
+							<div className="mb-1 font-semibold uppercase tracking-wide text-red-300/80">
+								Unknown Agent Requests ({invalidPendingSpawns.length})
+							</div>
+							<div className="space-y-1">
+								{invalidPendingSpawns.map((req) => (
+									<div key={req.id} className="min-w-0">
+										<p className="truncate font-medium text-red-200/90">{req.agent}</p>
+										<p className="truncate text-red-200/55">{req.task || req.reason}</p>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+					{compactionAction.state || compactionAction.error ? (
+						<div className="rounded-md border border-border/30 bg-muted/15 px-2.5 py-2 text-[10px]">
+							<div className="font-semibold uppercase tracking-wide text-muted-foreground">
+								Context
+							</div>
+							<p className="mt-1 leading-snug text-muted-foreground/70">
+								{compactionAction.error
+									? `Compaction failed: ${compactionAction.error}`
+									: compactionAction.state === "AUTO_COMPACTING"
+										? "Compacting context and writing a brain snapshot."
+										: "Context compacted; saved brain context will be restored on the next send."}
+							</p>
+						</div>
+					) : null}
 
 					{/* Team roster — shown when + button pressed during active sessions */}
 					{!isIdle && rosterOpen && (

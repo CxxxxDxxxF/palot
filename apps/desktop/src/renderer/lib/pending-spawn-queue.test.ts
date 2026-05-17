@@ -5,6 +5,7 @@ import {
 	parseSpawnRequests,
 	parseSpawnRequestsFromText,
 	pendingRequests,
+	SPAWN_TEAM_TEMPLATES,
 } from "./pending-spawn-queue"
 
 const SAMPLE = [
@@ -153,6 +154,31 @@ describe("parseSpawnRequestsFromText", () => {
 
 	test("returns empty string for null input", () => {
 		expect(parseSpawnRequestsFromText("")).toEqual([])
+	})
+
+	test("expands known team templates into concrete agent requests", () => {
+		const block = JSON.stringify({
+			type: "palot.spawn_request",
+			teams: [
+				{
+					name: "frontend-team",
+					task: "Build a polished settings screen.",
+					reason: "React UI team",
+				},
+			],
+		})
+		const requests = parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)
+		expect(requests.map((r) => r.agent)).toEqual(SPAWN_TEAM_TEMPLATES["frontend-team"].agents)
+		expect(requests.every((r) => r.task === "Build a polished settings screen.")).toBe(true)
+		expect(requests.every((r) => r.reason === "React UI team")).toBe(true)
+	})
+
+	test("ignores unknown team templates", () => {
+		const block = JSON.stringify({
+			type: "palot.spawn_request",
+			teams: [{ name: "unknown-team", task: "Do work" }],
+		})
+		expect(parseSpawnRequestsFromText(`\`\`\`json\n${block}\n\`\`\``)).toEqual([])
 	})
 })
 
