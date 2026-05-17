@@ -125,6 +125,16 @@ async function handleFetchProxy(
 	_event: Electron.IpcMainInvokeEvent,
 	req: SerializedRequest,
 ): Promise<SerializedResponse> {
+	// Restrict proxy to the OpenCode server origin — prevents SSRF from a
+	// compromised renderer reaching cloud metadata endpoints or localhost services.
+	const serverUrl = getServerUrl()
+	if (serverUrl) {
+		const allowed = new URL(serverUrl)
+		const requested = new URL(req.url)
+		if (requested.origin !== allowed.origin) {
+			throw new Error(`Fetch proxy blocked: ${requested.origin} is not the OpenCode server`)
+		}
+	}
 	log.info("IPC fetch proxy →", { method: req.method, url: req.url })
 	const start = Date.now()
 	const response = await net.fetch(req.url, {

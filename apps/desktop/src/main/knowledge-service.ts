@@ -75,8 +75,12 @@ export class KnowledgeService {
 
 	/** Get a single knowledge source by filename (with or without .md). */
 	async get(filename: string): Promise<KnowledgeSource | null> {
-		const safeFilename = filename.replace(/\.md$/i, "") + ".md"
-		const fullPath = path.join(this.knowledgeDir, safeFilename)
+		const normalized = filename.replace(/\.md$/i, "")
+		if (!/^[A-Za-z0-9_.-]+$/.test(normalized)) return null
+		const safeFilename = normalized + ".md"
+		const root = path.resolve(this.knowledgeDir)
+		const fullPath = path.resolve(root, safeFilename)
+		if (!fullPath.startsWith(root + path.sep)) return null
 		try {
 			const raw = await fs.readFile(fullPath, "utf-8")
 			return parseKnowledgeDocument(raw, safeFilename, "project")

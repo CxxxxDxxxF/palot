@@ -44,3 +44,17 @@ Replaced the naive substring-based knowledge filtering in the spawn dialog with 
 - Mem9 semantic search can be added as an additional signal layer in the future
 
 **Impact:** Spawn dialog now shows knowledge sources ranked by relevance, with the most pertinent docs pre-checked. The old substring match was too broad and gave equal weight to all matches.
+
+## 2026-05-17T03:13:00.000Z — Agent-overhaul Phase 2: spawn protocol + pages + Mem9
+
+**Commits:** 0cbf2d9, 8aba699, 75668cf
+
+**What was built:**
+- `palot.spawn_request` JSON block protocol: Lead Agent emits spawn requests as structured JSON in chat output; `parseSpawnRequestsFromText()` detects them in real-time via Jotai atom watching; pending spawn UI shows Approve / Approve All buttons
+- `brain-page.tsx` + `knowledge-page.tsx` — full browser UIs for `.palot/brain/` and `.agents/knowledge/` with Mem9 memory search tab
+- `mem9-service.ts` — HTTP client for Mem9 REST API v1alpha2 with graceful degradation
+- `use-mem9-memory.ts` — hook that auto-records completed agent sessions to Mem9
+- Fixed missing `knowledge-src:list` and `knowledge-src:get` IPC handlers (KnowledgeService was wired in preload but not registered in ipc-handlers)
+- Moved and fixed `mem9-service.test.ts` (24 tests) to correct package
+
+**Status:** All gates green — 614 tests / 0 fail, lint clean, build clean

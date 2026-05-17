@@ -1,7 +1,7 @@
 ---
 title: Task Graph
 tags: [tasks, planning]
-updated: 2026-05-14 (heartbeat-recovery + pipeline-integration-test completed)
+updated: 2026-05-17 (spawn-protocol + brain/knowledge pages + Mem9 completed)
 ---
 
 # Task Graph

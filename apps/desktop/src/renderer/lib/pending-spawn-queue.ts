@@ -34,9 +34,6 @@ export interface SpawnRequest {
 	requestedAt: string
 }
 
-const SECTION_RE = /^## REQUEST:([^:\n]+):([^\n]+)/gm
-const FIELD_RE = /^- \*\*(\w+)\*\*:\s*(.+)$/m
-
 /** Parse all spawn requests from the brain slug content. */
 export function parseSpawnRequests(content: string | null): SpawnRequest[] {
 	if (!content) return []
