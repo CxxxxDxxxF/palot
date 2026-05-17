@@ -11,6 +11,8 @@ import type { ManagedSkill } from "../../shared/skills"
 export interface HiveSpawnPromptInput {
 	agentName: string
 	agentDescription: string
+	/** Full system prompt from the agent's .md definition. Prepended before Hive protocol. */
+	agentSystemPrompt?: string
 	customInstruction: string
 	brainContext?: string | null
 	memories?: string | null
@@ -80,11 +82,21 @@ function formatSkills(agentName: string, task: string, skills: ManagedSkill[] | 
 
 export function buildHiveSpawnPrompt(input: HiveSpawnPromptInput): string {
 	const task = normalize(input.customInstruction) || `Begin your work as ${input.agentName}.`
+
+	// Agent identity: system prompt from the agent's .md definition first,
+	// then Hive protocol. This preserves specialist expertise while adding
+	// shared brain/memory/reporting rules on top.
+	const agentIdentity = input.agentSystemPrompt
+		? [input.agentSystemPrompt.trim(), "", "---", ""]
+		: [
+				`You are **${input.agentName}**, spawned by the Lead Agent (Boss) inside Palot's Hive Mind.`,
+				input.agentDescription ? `Role: ${input.agentDescription}` : "",
+				"",
+			]
+
 	const parts: string[] = [
+		...agentIdentity,
 		"## Palot Hive Operating Protocol",
-		"",
-		`You are **${input.agentName}**, spawned by the Lead Agent (Boss) inside Palot's Hive Mind.`,
-		input.agentDescription ? `Role: ${input.agentDescription}` : "",
 		"",
 		"### Required workflow",
 		"",

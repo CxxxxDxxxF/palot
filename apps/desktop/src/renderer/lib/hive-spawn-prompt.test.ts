@@ -101,4 +101,45 @@ describe("buildHiveSpawnPrompt", () => {
 		expect(prompt).toContain("- Brain context unavailable: timeout")
 		expect(prompt).toContain("report these warnings back to the Boss")
 	})
+
+	test("prepends agentSystemPrompt before Hive protocol when provided", () => {
+		const systemPrompt = "You are a React specialist. You focus exclusively on React components."
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "react-specialist",
+			agentDescription: "React component expert",
+			agentSystemPrompt: systemPrompt,
+			customInstruction: "Fix the scroll bug.",
+		})
+
+		const systemPromptIdx = prompt.indexOf(systemPrompt)
+		const hiveIdx = prompt.indexOf("## Palot Hive Operating Protocol")
+
+		expect(systemPromptIdx).toBeGreaterThanOrEqual(0)
+		expect(hiveIdx).toBeGreaterThan(systemPromptIdx)
+		// Identity fallback line should NOT appear when system prompt is set
+		expect(prompt).not.toContain("spawned by the Lead Agent (Boss) inside Palot's Hive Mind.")
+	})
+
+	test("falls back to identity header when agentSystemPrompt is empty string", () => {
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "builder",
+			agentDescription: "General builder",
+			agentSystemPrompt: "",
+			customInstruction: "Build the feature.",
+		})
+
+		expect(prompt).toContain("spawned by the Lead Agent (Boss) inside Palot's Hive Mind.")
+		expect(prompt).toContain("## Palot Hive Operating Protocol")
+	})
+
+	test("falls back to identity header when agentSystemPrompt is omitted", () => {
+		const prompt = buildHiveSpawnPrompt({
+			agentName: "architect",
+			agentDescription: "System designer",
+			customInstruction: "Design the API.",
+		})
+
+		expect(prompt).toContain("You are **architect**")
+		expect(prompt).toContain("spawned by the Lead Agent (Boss) inside Palot's Hive Mind.")
+	})
 })

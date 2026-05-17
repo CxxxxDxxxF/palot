@@ -421,6 +421,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 			const prompt = buildHiveSpawnPrompt({
 				agentName,
 				agentDescription: _agentDescription,
+				agentSystemPrompt: _agentPrompt || undefined,
 				customInstruction,
 				brainContext,
 				memories,
