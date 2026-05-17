@@ -230,6 +230,8 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 	const totalTokensFormatted = formatTokens(totalTokens)
 	const anyRunning = entries.some((c) => c.agentStatus === "running")
 	const runningChildren = children.filter((c) => c.agentStatus === "running").length
+	const completedChildren = children.filter((c) => c.agentStatus === "completed").length
+	const failedChildren = children.filter((c) => c.agentStatus === "failed").length
 	const workflowPolicy = evaluateAgentWorkflowPolicy({
 		workflowKind: runningChildren > 1 ? "research" : "shared_write",
 		runningAgentCount: runningChildren,
@@ -278,6 +280,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 			_agentPrompt: string,
 			customInstruction: string,
 			knowledgeFilenames?: string[],
+			skillFilenames?: string[],
 		) => {
 			// Create a child session linked to the Lead
 			const child = await createSession(dir, agentName, parentSessionId)
@@ -286,7 +289,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 			}
 
 			const contextWarnings: string[] = []
-			const [brainContext, skills] = await Promise.all([
+			const [brainContext, allSkills] = await Promise.all([
 				getBrainContextSummary(dir, parentSessionId).catch((err) => {
 					const message = `Brain context unavailable: ${formatErrorMessage(err)}`
 					contextWarnings.push(message)
@@ -306,6 +309,7 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 					return []
 				}),
 			])
+			const skills = skillFilenames ? allSkills.filter((s) => skillFilenames.includes(s.filename)) : allSkills
 
 			let memories: string | null = null
 			try {
@@ -561,14 +565,38 @@ export const MultiAgentPanel = memo(function MultiAgentPanel({
 							</div>
 						</div>
 					)}
-					<div className="mt-2 rounded-md border border-border/30 bg-muted/15 px-2.5 py-2">
+					<div className="mt-2 rounded-md border border-border/30 bg-muted/15 px-2.5 py-2 space-y-1.5">
+						{children.length > 0 && (
+							<div className="flex items-center justify-between gap-2 text-[10px]">
+								<span className="font-medium text-muted-foreground">
+									{children.length} agent{children.length !== 1 ? "s" : ""} spawned
+								</span>
+								<div className="flex items-center gap-1">
+									{runningChildren > 0 && (
+										<span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">
+											{runningChildren} running
+										</span>
+									)}
+									{completedChildren > 0 && (
+										<span className="rounded-full border border-border/30 bg-muted/30 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+											{completedChildren} done
+										</span>
+									)}
+									{failedChildren > 0 && (
+										<span className="rounded-full border border-red-400/30 bg-red-400/10 px-1.5 py-0.5 text-[9px] font-medium text-red-300">
+											{failedChildren} failed
+										</span>
+									)}
+								</div>
+							</div>
+						)}
 						<div className="flex items-center justify-between gap-2">
 							<span className="text-[11px] text-muted-foreground">Session spend</span>
 							<span className="text-sm font-semibold tabular-nums text-foreground">
 								{totalCostFormatted}
 							</span>
 						</div>
-						<div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+						<div className="flex items-center justify-between gap-2 text-[10px]">
 							<span className="tabular-nums text-muted-foreground/60">
 								{totalTokensFormatted} tokens
 							</span>

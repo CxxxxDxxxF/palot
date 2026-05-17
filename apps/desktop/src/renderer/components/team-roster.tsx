@@ -12,12 +12,13 @@ import {
 } from "@palot/ui/components/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@palot/ui/components/tooltip"
 import { cn } from "@palot/ui/lib/utils"
-import { AlertCircleIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, CrownIcon, Loader2Icon, PlayIcon, UsersIcon } from "lucide-react"
+import { AlertCircleIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, CrownIcon, Loader2Icon, PlayIcon, UsersIcon, ZapIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { ManagedAgent } from "../../shared/agents"
 import type { KnowledgeSource } from "../../shared/knowledge"
+import type { ManagedSkill } from "../../shared/skills"
 import { scoreKnowledgeSources } from "../../shared/knowledge-scorer"
-import { listAgents, listKnowledgeSources } from "../services/backend"
+import { listAgents, listAllSkills, listKnowledgeSources } from "../services/backend"
 
 // ============================================================
 // Team metadata
@@ -65,7 +66,7 @@ interface SpawnDialogProps {
 	open: boolean
 	onClose: () => void
 	directory: string
-	onSpawn: (agentName: string, customInstruction: string, knowledgeFilenames?: string[]) => Promise<void>
+	onSpawn: (agentName: string, customInstruction: string, knowledgeFilenames?: string[], skillFilenames?: string[]) => Promise<void>
 }
 
 function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogProps) {
@@ -74,11 +75,16 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 	const [error, setError] = useState<string | null>(null)
 	const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([])
 	const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>([])
+	const [skills, setSkills] = useState<ManagedSkill[]>([])
+	const [selectedSkills, setSelectedSkills] = useState<string[]>([])
+	const [skillsExpanded, setSkillsExpanded] = useState(false)
 	const teamMeta = agent.team ? TEAM_META[agent.team] : undefined
 
 	useEffect(() => {
 		if (!open) return
 		setCustomInstruction(""); setSpawning(false); setError(null); setSelectedKnowledge([])
+		setSkills([]); setSelectedSkills([]); setSkillsExpanded(false)
+		listAllSkills().then((list) => { setSkills(list); setSelectedSkills(list.map((s) => s.filename)) }).catch(() => setSkills([]))
 		listKnowledgeSources(directory)
 			.then((sources) => {
 				const scored = scoreKnowledgeSources(sources, {
@@ -99,15 +105,20 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 		setSelectedKnowledge((prev) => prev.includes(filename) ? prev.filter((f) => f !== filename) : [...prev, filename])
 	}, [])
 
+	const toggleSkill = useCallback((filename: string) => {
+		setSelectedSkills((prev) => prev.includes(filename) ? prev.filter((f) => f !== filename) : [...prev, filename])
+	}, [])
+
 	const handleSpawn = useCallback(async () => {
 		setSpawning(true); setError(null)
 		try {
-			await onSpawn(agent.name, customInstruction, selectedKnowledge.length > 0 ? selectedKnowledge : undefined)
+			const skillsToPass = skills.length > 0 ? selectedSkills : undefined
+			await onSpawn(agent.name, customInstruction, selectedKnowledge.length > 0 ? selectedKnowledge : undefined, skillsToPass)
 			onClose()
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to spawn agent.")
 		} finally { setSpawning(false) }
-	}, [agent.name, customInstruction, selectedKnowledge, onSpawn, onClose])
+	}, [agent.name, customInstruction, selectedKnowledge, selectedSkills, skills.length, onSpawn, onClose])
 
 	const modelRef = useMemo(() => (agent.model ? parseModelString(agent.model) : null), [agent.model])
 
@@ -207,6 +218,44 @@ function SpawnDialog({ agent, open, onClose, onSpawn, directory }: SpawnDialogPr
 							</div>
 						</div>
 					)}
+						{skills.length > 0 && (
+							<div>
+								<button
+									type="button"
+									onClick={() => setSkillsExpanded((v) => !v)}
+									className="mb-1 flex w-full items-center gap-1 text-[10px] font-medium text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+								>
+									<ZapIcon className="size-2.5" />
+									<span>
+										{selectedSkills.length}/{skills.length} skill{skills.length !== 1 ? "s" : ""} selected
+									</span>
+									{skillsExpanded ? <ChevronDownIcon className="ml-auto size-2.5" /> : <ChevronRightIcon className="ml-auto size-2.5" />}
+								</button>
+								{skillsExpanded && (
+									<div className="flex flex-wrap gap-1">
+										{skills.map((s) => {
+											const active = selectedSkills.includes(s.filename)
+											return (
+												<button
+													key={s.filename}
+													type="button"
+													onClick={() => toggleSkill(s.filename)}
+													disabled={spawning}
+													className={cn(
+														"rounded border px-1.5 py-0.5 text-[9px] transition-colors",
+														active
+															? "border-violet-400/30 bg-violet-400/10 text-violet-300"
+															: "border-border/20 bg-muted/10 text-muted-foreground/40 line-through",
+													)}
+												>
+													{s.name}
+												</button>
+											)
+										})}
+									</div>
+								)}
+							</div>
+						)}
 				</div>
 
 				<DialogFooter className="border-t border-border px-5 py-3">
@@ -320,6 +369,7 @@ export interface TeamRosterProps {
 		agentPrompt: string,
 		customInstruction: string,
 		knowledgeFilenames?: string[],
+		skillFilenames?: string[],
 	) => Promise<void>
 	disabled?: boolean
 }
@@ -358,10 +408,10 @@ export function TeamRoster({ directory, sessionId, onSpawn, disabled }: TeamRost
 	const handleOpenDialog = useCallback((agent: ManagedAgent) => { setSelectedAgent(agent); setDialogOpen(true) }, [])
 	const handleCloseDialog = useCallback(() => { setDialogOpen(false); setSelectedAgent(null) }, [])
 
-	const handleSpawnFromDialog = useCallback(async (agentName: string, customInstruction: string, knowledgeFilenames?: string[]) => {
+	const handleSpawnFromDialog = useCallback(async (agentName: string, customInstruction: string, knowledgeFilenames?: string[], skillFilenames?: string[]) => {
 		const agent = selectedAgent
 		if (!agent) return
-		await onSpawn(directory, sessionId, agentName, agent.description, agent.model, agent.prompt, customInstruction, knowledgeFilenames)
+		await onSpawn(directory, sessionId, agentName, agent.description, agent.model, agent.prompt, customInstruction, knowledgeFilenames, skillFilenames)
 	}, [directory, sessionId, selectedAgent, onSpawn])
 
 	if (loading) return <div className="flex items-center justify-center py-3"><Loader2Icon className="size-3 animate-spin text-muted-foreground/50" /></div>

@@ -19,6 +19,8 @@ import {
 	AlertCircleIcon,
 	BarChart3Icon,
 	BotIcon,
+	CheckIcon,
+	CopyIcon,
 	CrownIcon,
 	LayoutGridIcon,
 	ListIcon,
@@ -119,7 +121,7 @@ function CreateAgentDialog({ open, onClose, onSaved }: CreateDialogProps) {
 
 	return (
 		<Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-			<DialogContent className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 p-0">
+			<DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-0 p-0">
 				<DialogHeader className="border-b border-border px-6 py-4">
 					<DialogTitle>Create Agent</DialogTitle>
 				</DialogHeader>
@@ -185,12 +187,46 @@ interface DetailPanelProps {
 	onClose?: () => void
 }
 
+function SystemPromptSection({ prompt }: { prompt?: string }) {
+	const [copied, setCopied] = useState(false)
+	const text = prompt || ""
+
+	function handleCopy() {
+		navigator.clipboard.writeText(text).then(() => {
+			setCopied(true)
+			setTimeout(() => setCopied(false), 1500)
+		})
+	}
+
+	return (
+		<div>
+			<div className="mb-2 flex items-center justify-between">
+				<h3 className="text-sm font-medium text-muted-foreground">System Prompt</h3>
+				<div className="flex items-center gap-3">
+					<span className="text-xs text-muted-foreground">{text.length.toLocaleString()} chars</span>
+					<button
+						type="button"
+						onClick={handleCopy}
+						className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+					>
+						{copied ? <CheckIcon className="size-3 text-green-500" /> : <CopyIcon className="size-3" />}
+						{copied ? "Copied" : "Copy"}
+					</button>
+				</div>
+			</div>
+			<pre className="whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-relaxed text-foreground">
+				{text || "(empty)"}
+			</pre>
+		</div>
+	)
+}
+
 function AgentDetailPanel({ agent, performance, onDelete, onClose }: DetailPanelProps) {
 	const [confirmDelete, setConfirmDelete] = useState(false)
 	const teamMeta = agent.team ? TEAM_META[agent.team] : undefined
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex items-center justify-between border-b border-border px-6 py-4">
 				<div className="flex items-center gap-3">
 					<ColorDot color={agent.color} />
@@ -214,16 +250,25 @@ function AgentDetailPanel({ agent, performance, onDelete, onClose }: DetailPanel
 				</div>
 			</div>
 
-			<div className="grid grid-cols-2 gap-3 border-b border-border px-6 py-3 text-sm">
-				<div><span className="text-muted-foreground">Filename:</span> <code className="rounded bg-muted px-1 py-0.5 text-xs">{agent.filename}.md</code></div>
-				{agent.model && <div><span className="text-muted-foreground">Model:</span> <code className="rounded bg-muted px-1 py-0.5 text-xs">{agent.model}</code></div>}
-				<div><span className="text-muted-foreground">Origin:</span> {agent.origin}</div>
+			<div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-2 border-b border-border px-6 py-3 text-sm">
+				<span className="text-muted-foreground">Filename</span>
+				<code className="break-words rounded bg-muted px-1 py-0.5 text-xs">{agent.filename}.md</code>
+				{agent.model && (
+					<>
+						<span className="text-muted-foreground">Model</span>
+						<code className="break-words rounded bg-muted px-1 py-0.5 text-xs">{agent.model}</code>
+					</>
+				)}
+				<span className="text-muted-foreground">Origin</span>
+				<span>{agent.origin}</span>
 				{teamMeta && (
-					<div className="flex items-center gap-1.5">
-						<span className="text-muted-foreground">Team:</span>
-						<span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", teamMeta.bg, teamMeta.color)}>{teamMeta.displayName}</span>
-						{agent.teamRole === "leader" && <span className="text-[10px] text-amber-400 font-medium">Leader</span>}
-					</div>
+					<>
+						<span className="text-muted-foreground">Team</span>
+						<div className="flex items-center gap-1.5">
+							<span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", teamMeta.bg, teamMeta.color)}>{teamMeta.displayName}</span>
+							{agent.teamRole === "leader" && <span className="text-[10px] text-amber-400 font-medium">Leader</span>}
+						</div>
+					</>
 				)}
 			</div>
 
@@ -237,8 +282,7 @@ function AgentDetailPanel({ agent, performance, onDelete, onClose }: DetailPanel
 			)}
 
 			<div className="flex-1 overflow-y-auto px-6 py-4">
-				<h3 className="mb-2 text-sm font-medium text-muted-foreground">System Prompt</h3>
-				<pre className="min-h-[200px] whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-relaxed text-foreground">{agent.prompt || "(empty)"}</pre>
+				<SystemPromptSection prompt={agent.prompt} />
 				<h3 className="mb-2 mt-6 text-sm font-medium text-muted-foreground">Raw Source</h3>
 				<pre className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-relaxed text-muted-foreground">{agent.raw}</pre>
 			</div>
@@ -391,7 +435,7 @@ function OrgChartView({ agents, onSelect }: OrgChartViewProps) {
 	const unassigned = agents.filter((a) => !a.team && a !== boss)
 
 	return (
-		<div className="flex flex-col gap-6 overflow-y-auto p-6">
+		<div className="flex min-w-max flex-col gap-6 p-6">
 			{/* Boss row */}
 			{boss ? (
 				<div className="flex flex-col items-center gap-2">
@@ -407,19 +451,20 @@ function OrgChartView({ agents, onSelect }: OrgChartViewProps) {
 				</div>
 			)}
 
-			{/* Teams grid */}
-			<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+			{/* Teams — horizontal row, one column per team */}
+			<div className="flex gap-3">
 				{teamOrder.map((teamKey) => {
 					const team = byTeam[teamKey]
 					if (!team) return null
 					return (
-						<TeamCard
-							key={teamKey}
-							teamKey={teamKey}
-							leader={team.leader}
-							members={team.members}
-							onAgentClick={onSelect}
-						/>
+						<div key={teamKey} className="w-52 shrink-0">
+							<TeamCard
+								teamKey={teamKey}
+								leader={team.leader}
+								members={team.members}
+								onAgentClick={onSelect}
+							/>
+						</div>
 					)
 				})}
 			</div>
@@ -540,7 +585,7 @@ function InspectDialog({ agent, performanceByAgent, onClose, onDelete }: Inspect
 	if (!agent) return null
 	return (
 		<Dialog open={!!agent} onOpenChange={(v) => { if (!v) onClose() }}>
-			<DialogContent className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 p-0">
+			<DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-0 p-0">
 				<AgentDetailPanel
 					agent={agent}
 					performance={performanceByAgent.get(agent.name)}
@@ -631,7 +676,7 @@ function PerformanceView({ ledger, onAgentClick }: PerformanceViewProps) {
 	}
 
 	return (
-		<div className="flex flex-col gap-4 overflow-y-auto p-5">
+		<div className="flex flex-col gap-4 p-5">
 			{/* Summary cards */}
 			<div className="grid grid-cols-4 gap-3">
 				{[
@@ -814,9 +859,9 @@ export function AgentsPage() {
 	}, [agents])
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex h-full min-h-0 flex-col">
 			{/* Top bar */}
-			<div className="flex items-center justify-between border-b border-border px-5 py-3">
+			<div className="shrink-0 flex items-center justify-between border-b border-border px-5 py-3">
 				<div className="flex items-center gap-4">
 					<h1 className="text-sm font-semibold">Agent Organization</h1>
 					{!loading && (
@@ -871,11 +916,11 @@ export function AgentsPage() {
 					<Loader2Icon className="size-5 animate-spin text-muted-foreground" />
 				</div>
 			) : viewMode === "org" ? (
-				<div className="flex-1 overflow-hidden">
+				<div className="flex-1 min-h-0 overflow-auto">
 					<OrgChartView agents={agents} onSelect={handleOrgSelect} />
 				</div>
 			) : viewMode === "perf" ? (
-				<div className="flex-1 overflow-hidden">
+				<div className="flex-1 min-h-0 overflow-auto">
 					{ledger ? (
 						<PerformanceView
 							ledger={ledger}
@@ -891,7 +936,7 @@ export function AgentsPage() {
 					)}
 				</div>
 			) : (
-				<div className="flex-1 overflow-hidden">
+				<div className="flex-1 min-h-0 overflow-hidden">
 					<ListView
 						agents={agents}
 						performanceByAgent={performanceByAgent}
